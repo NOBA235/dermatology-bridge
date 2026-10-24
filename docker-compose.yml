@@ -1,0 +1,23 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: dermobridge-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: dermobridge
+      POSTGRES_PASSWORD: dermobridge_dev_password
+      POSTGRES_DB: dermobridge
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dermobridge -d dermobridge"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
