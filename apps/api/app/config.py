@@ -75,3 +75,4 @@ def get_settings() -> Settings:
     settings = Settings()
     verify_startup_invariants(settings)
     return settings
+

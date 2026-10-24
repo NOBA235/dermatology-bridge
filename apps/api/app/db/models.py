@@ -286,3 +286,4 @@ class TreatmentFlag(Base):
     patient: Mapped[Patient] = relationship(back_populates="treatment_flags")
     baseline_visit: Mapped[Visit] = relationship(foreign_keys=[baseline_visit_id])
     latest_visit: Mapped[Visit] = relationship(foreign_keys=[latest_visit_id])
+

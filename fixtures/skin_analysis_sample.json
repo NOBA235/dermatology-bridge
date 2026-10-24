@@ -1,0 +1,108 @@
+{
+  "status": 200,
+  "result": {
+    "task_id": "yc_task_sample_baseline_001",
+    "src_file_id": "yc_file_sample_selfie_001",
+    "task_status": "success",
+    "analysis_version": 1,
+    "prerender": true,
+    "results": [
+      {
+        "concern": "acne",
+        "type": "acne",
+        "score": 64.0,
+        "ui_score": 64.0,
+        "raw_score": 0.64,
+        "mask_url": "https://yce-ephemeral.youcam.local/masks/yc_task_sample_baseline_001/acne.png"
+      },
+      {
+        "concern": "wrinkle",
+        "type": "wrinkle",
+        "score": 28.5,
+        "ui_score": 28.5,
+        "raw_score": 0.285,
+        "mask_url": "https://yce-ephemeral.youcam.local/masks/yc_task_sample_baseline_001/wrinkle.png"
+      },
+      {
+        "concern": "pores",
+        "type": "pores",
+        "score": 52.0,
+        "ui_score": 52.0,
+        "raw_score": 0.52,
+        "mask_url": "https://yce-ephemeral.youcam.local/masks/yc_task_sample_baseline_001/pores.png"
+      },
+      {
+        "concern": "texture",
+        "type": "texture",
+        "score": 47.0,
+        "ui_score": 47.0,
+        "raw_score": 0.47,
+        "mask_url": "https://yce-ephemeral.youcam.local/masks/yc_task_sample_baseline_001/texture.png"
+      },
+      {
+        "concern": "redness",
+        "type": "redness",
+        "score": 58.5,
+        "ui_score": 58.5,
+        "raw_score": 0.585,
+        "mask_url": "https://yce-ephemeral.youcam.local/masks/yc_task_sample_baseline_001/redness.png"
+      },
+      {
+        "concern": "oiliness",
+        "type": "oiliness",
+        "score": 61.0,
+        "ui_score": 61.0,
+        "raw_score": 0.61,
+        "mask_url": "https://yce-ephemeral.youcam.local/masks/yc_task_sample_baseline_001/oiliness.png"
+      },
+      {
+        "concern": "moisture",
+        "type": "moisture",
+        "score": 44.0,
+        "ui_score": 44.0,
+        "raw_score": 0.44,
+        "mask_url": "https://yce-ephemeral.youcam.local/masks/yc_task_sample_baseline_001/moisture.png"
+      },
+      {
+        "concern": "radiance",
+        "type": "radiance",
+        "score": 51.5,
+        "ui_score": 51.5,
+        "raw_score": 0.515,
+        "mask_url": "https://yce-ephemeral.youcam.local/masks/yc_task_sample_baseline_001/radiance.png"
+      },
+      {
+        "concern": "firmness",
+        "type": "firmness",
+        "score": 73.0,
+        "ui_score": 73.0,
+        "raw_score": 0.73,
+        "mask_url": "https://yce-ephemeral.youcam.local/masks/yc_task_sample_baseline_001/firmness.png"
+      },
+      {
+        "concern": "dark_circle_v2",
+        "type": "dark_circle_v2",
+        "score": 39.0,
+        "ui_score": 39.0,
+        "raw_score": 0.39,
+        "mask_url": "https://yce-ephemeral.youcam.local/masks/yc_task_sample_baseline_001/dark_circle_v2.png"
+      },
+      {
+        "concern": "dark_spot",
+        "type": "dark_spot",
+        "score": 33.5,
+        "ui_score": 33.5,
+        "raw_score": 0.335,
+        "mask_url": "https://yce-ephemeral.youcam.local/masks/yc_task_sample_baseline_001/dark_spot.png"
+      },
+      {
+        "concern": "skin_tone",
+        "type": "skin_tone",
+        "score": 68.0,
+        "ui_score": 68.0,
+        "raw_score": 0.68,
+        "mask_url": "https://yce-ephemeral.youcam.local/masks/yc_task_sample_baseline_001/skin_tone.png"
+      }
+    ]
+  }
+}
