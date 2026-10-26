@@ -175,3 +175,4 @@ def validate_agent_output(
                         raise UngroundedClaim(
                             "Hypothesis item is missing mandatory clinical disclaimer."
                         )
+

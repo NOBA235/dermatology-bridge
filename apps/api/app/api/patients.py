@@ -3,7 +3,7 @@
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
@@ -24,6 +24,11 @@ from app.domain.concerns import CONCERN_DIRECTION, CONCERN_LABELS, CONCERN_LIST
 from app.domain.flags import MDC_TABLE, compute_delta_and_pct, compute_verdict
 from app.domain.severity import map_score_to_severity
 from app.services.agent import regenerate_patient_flags
+from app.services.report import (
+    FHIRBundle,
+    build_patient_fhir_bundle,
+    build_patient_report_pdf,
+)
 
 router = APIRouter(prefix="/patients", tags=["patients"])
 
@@ -254,5 +259,40 @@ def get_patient_flags_endpoint(
         flags=[TreatmentFlagOut.model_validate(f) for f in outcome.flags],
         disclaimer=CLINICAL_DISCLAIMER,
     )
+
+
+@router.get("/{patient_id}/report.pdf")
+def get_patient_report_pdf(
+    patient_id: uuid.UUID,
+    clinician: Clinician = Depends(get_current_clinician),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Render and return the 3-page A4 consultation PDF report for a patient."""
+    patient = _get_authorized_patient(db, patient_id, clinician)
+    pdf_bytes, _html_str, _ctx = build_patient_report_pdf(
+        db,
+        patient.id,
+        clinician=clinician,
+    )
+    filename = f"dermobridge-report-{patient.external_ref or patient.id}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="{filename}"',
+        },
+    )
+
+
+@router.get("/{patient_id}/fhir", response_model=FHIRBundle)
+def get_patient_fhir_export(
+    patient_id: uuid.UUID,
+    clinician: Clinician = Depends(get_current_clinician),
+    db: Session = Depends(get_db),
+) -> FHIRBundle:
+    """Export all patient concern_scores as FHIR R4 Observation resources inside a Bundle."""
+    patient = _get_authorized_patient(db, patient_id, clinician)
+    return build_patient_fhir_bundle(db, patient.id)
+
 
 

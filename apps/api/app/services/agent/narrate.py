@@ -317,3 +317,4 @@ def generate_narrative(
             continue
 
     return render_fallback_narrative(source_json)
+

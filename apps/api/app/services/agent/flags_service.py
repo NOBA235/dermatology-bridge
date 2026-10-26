@@ -199,3 +199,4 @@ def regenerate_patient_flags(
         used_fallback=narrative.used_fallback,
         flags=inserted_flags,
     )
+

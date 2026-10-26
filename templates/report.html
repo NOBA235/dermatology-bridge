@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Dermatology Bridge Consultation Report — {{ patient.full_name }}</title>
+  <style>{{ report_css }}</style>
+</head>
+<body>
+  <!-- ==================== PAGE 1: SNAPSHOT ==================== -->
+  <section class="report-page page-break" id="page-1">
+    <div>
+      <header class="header-bar">
+        <div>
+          <div class="brand-title">Dermatology Bridge — Longitudinal Skin Report</div>
+          <div class="brand-subtitle">{{ clinic_name }} | Reviewing Clinician: {{ clinician_name }}</div>
+        </div>
+        <div class="brand-subtitle">Page 1 of 3 — Clinical Snapshot</div>
+      </header>
+
+      <div class="disclaimer-banner">{{ disclaimer }}</div>
+
+      <div class="patient-meta-grid">
+        <div class="patient-meta-row">
+          <div class="patient-meta-cell">
+            <span class="meta-label">Patient Name</span>
+            <span class="meta-value">{{ patient.full_name }}</span>
+          </div>
+          <div class="patient-meta-cell">
+            <span class="meta-label">Chart Ref / DOB</span>
+            <span class="meta-value">{{ patient.external_ref or "N/A" }} ({{ patient.dob or "N/A" }})</span>
+          </div>
+          <div class="patient-meta-cell">
+            <span class="meta-label">Observation Window</span>
+            <span class="meta-value">{{ baseline_date or "N/A" }} &rarr; {{ latest_date or "N/A" }} ({{ days_between if days_between is not none else 0 }}d / {{ visit_count }} visits)</span>
+          </div>
+          <div class="patient-meta-cell">
+            <span class="meta-label">Consent &amp; Analysis Ver</span>
+            <span class="meta-value">{{ patient.consent_version }} / v{{ analysis_version or 1 }}</span>
+          </div>
+        </div>
+      </div>
+
+      <h2 class="section-heading">12-Concern Longitudinal Snapshot Grid</h2>
+      <table class="snapshot-table">
+        <thead>
+          <tr>
+            <th>Concern</th>
+            <th>Direction</th>
+            <th>Baseline</th>
+            <th>Latest</th>
+            <th>&Delta; vs Base</th>
+            <th>Severity</th>
+            <th>Verdict</th>
+            <th>Sparkline ({{ visit_count }} pts)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in snapshot_rows %}
+          <tr data-concern="{{ item.concern }}">
+            <td><strong>{{ item.label }}</strong> <span style="color:#64748b;">({{ item.concern }})</span></td>
+            <td>{{ "Higher = Better" if item.direction == "higher_is_better" else "Lower = Better" }}</td>
+            <td>{{ item.baseline_score if item.baseline_score is not none else "—" }}</td>
+            <td>{{ item.latest_score if item.latest_score is not none else "—" }}</td>
+            <td>{{ item.delta if item.delta is not none else "—" }}</td>
+            <td>
+              <span class="badge severity-{{ item.latest_severity or item.baseline_severity or 'mild' }}">
+                {{ item.latest_severity or item.baseline_severity or "N/A" }}
+              </span>
+            </td>
+            <td>
+              <span class="badge verdict-{{ item.verdict }}">
+                {{ item.verdict }}
+              </span>
+            </td>
+            <td>
+              <img
+                class="sparkline-img"
+                src="{{ item.sparkline_data_uri }}"
+                alt="Sparkline {{ item.concern }} ({{ item.points_count }} points)"
+                data-points-count="{{ item.points_count }}"
+              />
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <footer class="footer-bar">
+      <span>{{ disclaimer }}</span>
+      <span>Patient images and overlays stored privately; deletable on request.</span>
+    </footer>
+  </section>
+
+  <!-- ==================== PAGE 2: TRENDS & EVIDENCE ==================== -->
+  <section class="report-page page-break" id="page-2">
+    <div>
+      <header class="header-bar">
+        <div>
+          <div class="brand-title">Trends &amp; Visual Evidence — Priority Concerns</div>
+          <div class="brand-subtitle">Patient: {{ patient.full_name }} ({{ patient.external_ref or "N/A" }})</div>
+        </div>
+        <div class="brand-subtitle">Page 2 of 3 — Trends &amp; Evidence</div>
+      </header>
+
+      <div class="disclaimer-banner">{{ disclaimer }}</div>
+
+      <h2 class="section-heading">Top-3 Prioritized Concerns (|&Delta;| &times; Chief Complaint Relevance)</h2>
+      {% for top in top3_cards %}
+      <div class="top3-card" data-top-concern="{{ top.concern }}">
+        <div class="top3-header">
+          <div>
+            <strong>#{{ loop.index }} — {{ top.label }} ({{ top.concern }})</strong>
+            <span style="color:#475569; font-size:8pt; margin-left:6px;">
+              Baseline: {{ top.baseline_score }} &rarr; Latest: {{ top.latest_score }} (&Delta; {{ top.delta }}, MDC {{ top.mdc }})
+            </span>
+          </div>
+          <div>
+            <span class="badge severity-{{ top.latest_severity }}">{{ top.latest_severity }}</span>
+            <span class="badge verdict-{{ top.verdict }}">{{ top.verdict }}</span>
+          </div>
+        </div>
+        <div class="top3-body">
+          <div class="top3-chart-cell">
+            <img
+              class="top3-chart-img"
+              src="{{ top.chart_data_uri }}"
+              alt="Trajectory chart for {{ top.concern }}"
+            />
+          </div>
+          <div class="top3-mask-cell">
+            <img
+              class="mask-preview-img"
+              src="{{ top.mask_data_uri }}"
+              alt="Overlay mask for {{ top.concern }}"
+              data-mask-status="{{ top.mask_status }}"
+            />
+            <div style="font-size:6.5pt; color:#64748b; margin-top:2px;">
+              {{ "Cached Overlay Mask" if top.mask_status == "cached" else "Overlay Placeholder" }}
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+
+      <h2 class="section-heading">Longitudinal Encounter Log</h2>
+      <table class="visits-table">
+        <thead>
+          <tr>
+            <th>Visit Date</th>
+            <th>Chief Complaint</th>
+            <th>Reported Routine</th>
+            <th>Treatment Changes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for v in visits %}
+          <tr>
+            <td><strong>{{ v.visit_date }}</strong></td>
+            <td>{{ v.chief_complaint or "—" }}</td>
+            <td>{{ v.routine_text or "—" }}</td>
+            <td>{{ v.treatment_changes or "—" }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <footer class="footer-bar">
+      <span>{{ disclaimer }}</span>
+      <span>Page 2 of 3</span>
+    </footer>
+  </section>
+
+  <!-- ==================== PAGE 3: FLAGS & DISCUSSION ==================== -->
+  <section class="report-page" id="page-3">
+    <div>
+      <header class="header-bar">
+        <div>
+          <div class="brand-title">Treatment-Response Flags &amp; Clinical Discussion</div>
+          <div class="brand-subtitle">Patient: {{ patient.full_name }} ({{ patient.external_ref or "N/A" }})</div>
+        </div>
+        <div class="brand-subtitle">Page 3 of 3 — Flags &amp; Discussion</div>
+      </header>
+
+      <div class="disclaimer-banner">{{ disclaimer }}</div>
+
+      <h2 class="section-heading">Grounded Longitudinal Summary</h2>
+      <div class="narrative-box">
+        {{ narrative_summary }}
+      </div>
+
+      <h2 class="section-heading">Per-Concern Attribution Hypotheses (Clinician Review)</h2>
+      <table class="hypothesis-table">
+        <thead>
+          <tr>
+            <th style="width:18%;">Concern</th>
+            <th style="width:11%;">Verdict</th>
+            <th style="width:11%;">&Delta;</th>
+            <th style="width:60%;">Grounded Attribution Hypothesis</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for f in flag_rows %}
+          <tr data-flag-concern="{{ f.concern }}">
+            <td><strong>{{ f.label }}</strong></td>
+            <td><span class="badge verdict-{{ f.verdict }}">{{ f.verdict }}</span></td>
+            <td>{{ f.delta }}</td>
+            <td>{{ f.hypothesis }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <footer class="footer-bar">
+      <span>{{ disclaimer }}</span>
+      <span>Page 3 of 3 — End of Consultation Report</span>
+    </footer>
+  </section>
+</body>
+</html>

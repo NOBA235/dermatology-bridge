@@ -157,3 +157,4 @@ def prioritize_concerns(
     scored_indices.sort(key=lambda pair: (-pair[0], pair[1]))
     selected = [idx for _score, idx in scored_indices[: max(0, min(top_k, len(CONCERN_LIST)))]]
     return selected
+

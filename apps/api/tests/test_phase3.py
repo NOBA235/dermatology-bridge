@@ -236,3 +236,4 @@ def test_agent_output_passes_pydantic_schema_on_10_consecutive_runs(
         for hyp in validated.hypotheses.values():
             assert hyp.endswith(CLINICAL_DISCLAIMER)
         validate_agent_output(validated, source_json)
+
