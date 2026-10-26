@@ -1,4 +1,4 @@
-"""Pydantic v2 schemas for Visit creation and responses."""
+"""Pydantic v2 schemas for Visit creation, longitudinal visit listing, and trend responses."""
 
 from datetime import date, datetime
 from decimal import Decimal
@@ -8,6 +8,8 @@ import uuid
 from pydantic import BaseModel, ConfigDict
 
 from app import CLINICAL_DISCLAIMER
+from app.domain.concerns import ConcernDirection, SeverityBucket
+from app.domain.flags import Verdict
 
 
 class ConcernScoreOut(BaseModel):
@@ -25,7 +27,7 @@ class ConcernScoreOut(BaseModel):
 
 
 class VisitOut(BaseModel):
-    """Full visit response returned by POST /api/visits."""
+    """Full visit response returned by POST /api/visits and GET /api/patients/{id}/visits."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -44,4 +46,54 @@ class VisitOut(BaseModel):
     concern_scores: list[ConcernScoreOut] = []
     created_at: datetime
     updated_at: datetime
+    disclaimer: str = CLINICAL_DISCLAIMER
+
+
+class PatientVisitsResponse(BaseModel):
+    """List of visits with concern scores for a single patient."""
+
+    patient_id: uuid.UUID
+    visit_count: int
+    visits: list[VisitOut]
+    disclaimer: str = CLINICAL_DISCLAIMER
+
+
+class TrendDataPointOut(BaseModel):
+    """Single longitudinal score point for a concern across visits."""
+
+    visit_id: uuid.UUID
+    visit_date: date
+    score: Decimal
+    severity: SeverityBucket
+
+
+class ConcernTrendOut(BaseModel):
+    """Per-concern longitudinal series, delta vs baseline, severity bucket, and verdict."""
+
+    concern: str
+    label: str
+    direction: ConcernDirection
+    mdc: float
+    baseline_score: Decimal | None = None
+    baseline_severity: SeverityBucket | None = None
+    latest_score: Decimal | None = None
+    latest_severity: SeverityBucket | None = None
+    delta: Decimal | None = None
+    pct_change: Decimal | None = None
+    verdict: Verdict
+    points: list[TrendDataPointOut] = []
+
+
+class PatientTrendsResponse(BaseModel):
+    """Longitudinal trend comparison response for GET /api/patients/{id}/trends."""
+
+    patient_id: uuid.UUID
+    visit_count: int
+    analysis_version: int | None = None
+    baseline_visit_id: uuid.UUID | None = None
+    latest_visit_id: uuid.UUID | None = None
+    baseline_date: date | None = None
+    latest_date: date | None = None
+    days_between: int | None = None
+    concerns: list[ConcernTrendOut]
     disclaimer: str = CLINICAL_DISCLAIMER
