@@ -97,3 +97,4 @@ def compute_verdict(
     if direction == "higher_is_better":
         return "improving" if numeric_delta > 0 else "worsening"
     return "improving" if numeric_delta < 0 else "worsening"
+

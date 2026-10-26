@@ -1,3 +1,4 @@
+
 """Patient longitudinal visit listing and trend endpoints (GET /api/patients/{id}/visits, /trends)."""
 
 import uuid
@@ -9,8 +10,10 @@ from sqlalchemy.orm import Session, selectinload
 from app import CLINICAL_DISCLAIMER
 from app.api.schemas import (
     ConcernTrendOut,
+    PatientFlagsResponse,
     PatientTrendsResponse,
     PatientVisitsResponse,
+    TreatmentFlagOut,
     TrendDataPointOut,
     VisitOut,
 )
@@ -20,6 +23,7 @@ from app.db.session import get_db
 from app.domain.concerns import CONCERN_DIRECTION, CONCERN_LABELS, CONCERN_LIST
 from app.domain.flags import MDC_TABLE, compute_delta_and_pct, compute_verdict
 from app.domain.severity import map_score_to_severity
+from app.services.agent import regenerate_patient_flags
 
 router = APIRouter(prefix="/patients", tags=["patients"])
 
@@ -201,3 +205,54 @@ def get_patient_trends(
         concerns=concern_trends,
         disclaimer=CLINICAL_DISCLAIMER,
     )
+
+
+@router.post("/{patient_id}/flags/regenerate", response_model=PatientFlagsResponse)
+def regenerate_flags_endpoint(
+    patient_id: uuid.UUID,
+    clinician: Clinician = Depends(get_current_clinician),
+    db: Session = Depends(get_db),
+) -> PatientFlagsResponse:
+    """Idempotently recompute treatment_flags (delete-then-insert) and grounded hypotheses for a patient."""
+    patient = _get_authorized_patient(db, patient_id, clinician)
+    try:
+        outcome = regenerate_patient_flags(db, patient.id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+    return PatientFlagsResponse(
+        patient_id=patient.id,
+        visit_count=outcome.visit_count,
+        top_concern_indices=outcome.top_concern_indices,
+        top_concerns=outcome.top_concerns,
+        summary=outcome.summary,
+        used_fallback=outcome.used_fallback,
+        flags=[TreatmentFlagOut.model_validate(f) for f in outcome.flags],
+        disclaimer=CLINICAL_DISCLAIMER,
+    )
+
+
+@router.get("/{patient_id}/flags", response_model=PatientFlagsResponse)
+def get_patient_flags_endpoint(
+    patient_id: uuid.UUID,
+    clinician: Clinician = Depends(get_current_clinician),
+    db: Session = Depends(get_db),
+) -> PatientFlagsResponse:
+    """Return materialized treatment_flags and grounded summary for a patient."""
+    patient = _get_authorized_patient(db, patient_id, clinician)
+    outcome = regenerate_patient_flags(db, patient.id)
+    return PatientFlagsResponse(
+        patient_id=patient.id,
+        visit_count=outcome.visit_count,
+        top_concern_indices=outcome.top_concern_indices,
+        top_concerns=outcome.top_concerns,
+        summary=outcome.summary,
+        used_fallback=outcome.used_fallback,
+        flags=[TreatmentFlagOut.model_validate(f) for f in outcome.flags],
+        disclaimer=CLINICAL_DISCLAIMER,
+    )
+
+

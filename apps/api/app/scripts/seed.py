@@ -13,6 +13,7 @@ from app.db.models import Clinic, Clinician, ConcernScore, Patient, Visit
 from app.db.session import SessionLocal
 from app.domain.concerns import ANALYSIS_VERSION, CONCERN_LIST
 from app.domain.severity import map_score_to_severity
+from app.services.agent import regenerate_patient_flags
 
 DEFAULT_CLINIC_NAME = "Bridge Dermatology Clinic"
 DEFAULT_CLINICIAN_NAME = "Dr. Maya Chen, MD"
@@ -279,6 +280,7 @@ def seed_demo_longitudinal(db: Session) -> dict[str, Any]:
         visit_ids.append(str(visit.id))
 
     db.commit()
+    regenerate_patient_flags(db, demo_patient.id)
     return {
         **base_info,
         "demo_patient_id": str(demo_patient.id),

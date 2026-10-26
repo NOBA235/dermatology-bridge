@@ -22,6 +22,7 @@ from app.config import get_settings
 from app.db.models import Clinician, ConcernScore, Patient, Visit
 from app.db.session import get_db
 from app.domain.concerns import ANALYSIS_VERSION, CONCERN_LIST
+from app.services.agent import regenerate_patient_flags
 from app.services.storage import PrivateStorageService
 from app.services.youcam import (
     YouCamClientProtocol,
@@ -142,6 +143,8 @@ async def create_visit(
             db.add(score_row)
 
         db.commit()
+        # Trigger materialized treatment_flags population after each visit is scored
+        regenerate_patient_flags(db, patient.id)
         db.refresh(visit)
         return VisitOut.model_validate(visit)
 

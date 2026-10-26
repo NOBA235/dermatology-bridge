@@ -97,3 +97,33 @@ class PatientTrendsResponse(BaseModel):
     days_between: int | None = None
     concerns: list[ConcernTrendOut]
     disclaimer: str = CLINICAL_DISCLAIMER
+
+
+class TreatmentFlagOut(BaseModel):
+    """Materialized treatment_flags row."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    patient_id: uuid.UUID
+    concern: str
+    baseline_visit_id: uuid.UUID
+    latest_visit_id: uuid.UUID
+    delta: Decimal
+    pct_change: Decimal | None = None
+    verdict: Verdict
+    hypothesis: str | None = None
+    generated_at: datetime
+
+
+class PatientFlagsResponse(BaseModel):
+    """Response returned by POST /api/patients/{id}/flags/regenerate and GET /api/patients/{id}/flags."""
+
+    patient_id: uuid.UUID
+    visit_count: int
+    top_concern_indices: list[int]
+    top_concerns: list[str]
+    summary: str
+    used_fallback: bool
+    flags: list[TreatmentFlagOut]
+    disclaimer: str = CLINICAL_DISCLAIMER

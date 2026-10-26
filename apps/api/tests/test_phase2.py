@@ -233,3 +233,4 @@ def test_trends_endpoint_rejects_mismatched_analysis_version(
     res = client.get(f"/api/patients/{patient_id}/trends", headers=headers)
     assert res.status_code == 409
     assert "analysis_version" in res.json()["detail"]
+

@@ -54,3 +54,4 @@ def map_score_to_severity(concern: str, score: float | Decimal) -> SeverityBucke
         if burden < upper_bound:
             return bucket
     return "severe"
+
