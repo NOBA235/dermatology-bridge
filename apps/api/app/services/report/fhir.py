@@ -198,3 +198,4 @@ def build_patient_fhir_bundle(
         total=len(entries),
         entry=entries,
     )
+

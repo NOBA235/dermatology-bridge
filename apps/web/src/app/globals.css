@@ -1,0 +1,106 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Native modal dialog scroll containment per modern-web-guidance 'dialog' */
+dialog:modal {
+  overscroll-behavior: contain;
+}
+
+dialog::backdrop {
+  overflow: hidden;
+  overscroll-behavior: contain;
+  background: rgba(15, 23, 42, 0.55);
+}
+
+/* Responsive data table per modern-web-guidance 'responsive-table' */
+.table-wrapper {
+  overflow: auto;
+  max-inline-size: 100%;
+  max-block-size: min(640px, 82vh);
+  container-type: inline-size;
+}
+
+.responsive-data-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+}
+
+.responsive-data-table thead {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 1;
+}
+
+.responsive-data-table tbody th {
+  position: sticky;
+  inset-inline-start: 0;
+  background: #ffffff;
+}
+
+@container (width < 600px) {
+  .responsive-data-table,
+  .responsive-data-table thead,
+  .responsive-data-table tbody,
+  .responsive-data-table tr,
+  .responsive-data-table th,
+  .responsive-data-table td {
+    display: block;
+  }
+
+  .responsive-data-table thead {
+    display: none;
+  }
+
+  .responsive-data-table tr {
+    margin-block-end: 1rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 0.5rem;
+    overflow: hidden;
+  }
+
+  .responsive-data-table tbody th {
+    position: sticky;
+    inset-block-start: 0;
+    z-index: 2;
+    background: #f1f5f9;
+  }
+
+  .responsive-data-table td:nth-child(2)::before {
+    content: var(--label-2, "Direction") ": ";
+    font-weight: 600;
+    color: #475569;
+  }
+
+  .responsive-data-table td:nth-child(3)::before {
+    content: var(--label-3, "Baseline") ": ";
+    font-weight: 600;
+    color: #475569;
+  }
+
+  .responsive-data-table td:nth-child(4)::before {
+    content: var(--label-4, "Latest") ": ";
+    font-weight: 600;
+    color: #475569;
+  }
+
+  .responsive-data-table td:nth-child(5)::before {
+    content: var(--label-5, "Delta") ": ";
+    font-weight: 600;
+    color: #475569;
+  }
+
+  .responsive-data-table td:nth-child(6)::before {
+    content: var(--label-6, "Severity") ": ";
+    font-weight: 600;
+    color: #475569;
+  }
+
+  .responsive-data-table td:nth-child(7)::before {
+    content: var(--label-7, "Verdict") ": ";
+    font-weight: 600;
+    color: #475569;
+  }
+}
+

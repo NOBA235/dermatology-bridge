@@ -3,20 +3,25 @@
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app import CLINICAL_DISCLAIMER
 from app.api.schemas import (
+    CaptureTokenOut,
     ConcernTrendOut,
+    PatientCreateRequest,
     PatientFlagsResponse,
+    PatientListResponse,
+    PatientOut,
     PatientTrendsResponse,
     PatientVisitsResponse,
     TreatmentFlagOut,
     TrendDataPointOut,
     VisitOut,
 )
+from app.auth.jwt import CAPTURE_TOKEN_DEFAULT_TTL_MINUTES, create_capture_token
 from app.auth.middleware import get_current_clinician
 from app.db.models import Clinician, ConcernScore, Patient, Visit
 from app.db.session import get_db
@@ -45,6 +50,127 @@ def _get_authorized_patient(
             detail="Patient not found in clinician's clinic.",
         )
     return patient
+
+
+def _to_patient_out(patient: Patient) -> PatientOut:
+    successful_visits = [
+        v for v in patient.visits if v.youcam_status == "success"
+    ]
+    latest_date = (
+        max(v.visit_date for v in successful_visits)
+        if successful_visits
+        else None
+    )
+    out = PatientOut.model_validate(patient)
+    out.visit_count = len(successful_visits)
+    out.latest_visit_date = latest_date
+    out.disclaimer = CLINICAL_DISCLAIMER
+    return out
+
+
+@router.get("", response_model=PatientListResponse)
+def list_patients(
+    q: str | None = Query(default=None, description="Search by patient name or chart ref"),
+    clinician: Clinician = Depends(get_current_clinician),
+    db: Session = Depends(get_db),
+) -> PatientListResponse:
+    """List and search patients in the authenticated clinician's clinic."""
+    stmt = (
+        select(Patient)
+        .where(Patient.clinic_id == clinician.clinic_id)
+        .options(selectinload(Patient.visits))
+        .order_by(Patient.created_at.desc())
+    )
+    if q and q.strip():
+        pattern = f"%{q.strip()}%"
+        stmt = stmt.where(
+            or_(
+                Patient.full_name.ilike(pattern),
+                Patient.external_ref.ilike(pattern),
+                Patient.notes.ilike(pattern),
+            )
+        )
+    patients = list(db.execute(stmt).scalars().all())
+    items = [_to_patient_out(p) for p in patients]
+    return PatientListResponse(
+        patients=items,
+        total=len(items),
+        disclaimer=CLINICAL_DISCLAIMER,
+    )
+
+
+@router.post("", response_model=PatientOut, status_code=status.HTTP_201_CREATED)
+def create_patient(
+    payload: PatientCreateRequest,
+    clinician: Clinician = Depends(get_current_clinician),
+    db: Session = Depends(get_db),
+) -> PatientOut:
+    """Create a new patient record in the authenticated clinician's clinic."""
+    cleaned_name = payload.full_name.strip()
+    if not cleaned_name:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Patient full_name cannot be blank.",
+        )
+
+    patient = Patient(
+        clinic_id=clinician.clinic_id,
+        full_name=cleaned_name,
+        external_ref=payload.external_ref.strip() if payload.external_ref else None,
+        dob=payload.dob,
+        consent_version=payload.consent_version or "v1-2026-10",
+        notes=payload.notes,
+    )
+    db.add(patient)
+    db.commit()
+    db.refresh(patient)
+    return _to_patient_out(patient)
+
+
+@router.get("/{patient_id}", response_model=PatientOut)
+def get_patient_detail(
+    patient_id: uuid.UUID,
+    clinician: Clinician = Depends(get_current_clinician),
+    db: Session = Depends(get_db),
+) -> PatientOut:
+    """Return a single patient profile with visit count."""
+    stmt = (
+        select(Patient)
+        .where(
+            Patient.id == patient_id,
+            Patient.clinic_id == clinician.clinic_id,
+        )
+        .options(selectinload(Patient.visits))
+    )
+    patient = db.execute(stmt).scalar_one_or_none()
+    if patient is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Patient not found in clinician's clinic.",
+        )
+    return _to_patient_out(patient)
+
+
+@router.post("/{patient_id}/capture-token", response_model=CaptureTokenOut)
+def generate_patient_capture_token(
+    patient_id: uuid.UUID,
+    clinician: Clinician = Depends(get_current_clinician),
+    db: Session = Depends(get_db),
+) -> CaptureTokenOut:
+    """Generate a signed, short-lived mobile selfie capture token for a patient."""
+    patient = _get_authorized_patient(db, patient_id, clinician)
+    token = create_capture_token(
+        patient_id=patient.id,
+        clinic_id=clinician.clinic_id,
+        clinician_id=clinician.id,
+        ttl_minutes=CAPTURE_TOKEN_DEFAULT_TTL_MINUTES,
+    )
+    return CaptureTokenOut(
+        token=token,
+        capture_path=f"/capture/{token}",
+        expires_in_seconds=CAPTURE_TOKEN_DEFAULT_TTL_MINUTES * 60,
+        patient_id=patient.id,
+    )
 
 
 @router.get("/{patient_id}/visits", response_model=PatientVisitsResponse)

@@ -1,4 +1,4 @@
-"""Idempotent database seed script for Phase 0 baseline and Phase 2 3-visit longitudinal demo patient."""
+"""Idempotent database seed script for baseline clinic/clinician records and 3-visit longitudinal demo patient."""
 
 from datetime import date
 from decimal import Decimal
@@ -18,13 +18,13 @@ from app.services.agent import regenerate_patient_flags
 DEFAULT_CLINIC_NAME = "Bridge Dermatology Clinic"
 DEFAULT_CLINICIAN_NAME = "Dr. Maya Chen, MD"
 
-# Phase 0 empty patient (kept with zero visits for empty/single-visit baseline tests)
+# Baseline empty patient (kept with zero visits for empty/single-visit baseline tests)
 DEFAULT_PATIENT_EXTERNAL_REF = "PT-0001"
 DEFAULT_PATIENT_NAME = "Alex Rivera"
 DEFAULT_PATIENT_DOB = date(1991, 4, 15)
 DEFAULT_CONSENT_VERSION = "v1-2026-10"
 
-# Phase 2 demo patient with 3 pre-computed visits spanning 90 days
+# Longitudinal demo patient with 3 pre-computed visits spanning 90 days
 DEMO_PATIENT_EXTERNAL_REF = "PT-DEMO-001"
 DEMO_PATIENT_NAME = "Elena Rostova"
 DEMO_PATIENT_DOB = date(1989, 11, 23)
@@ -141,7 +141,7 @@ def _build_seed_raw_result(
     }
 
 
-def seed_phase0(db: Session) -> dict[str, str]:
+def seed_baseline(db: Session) -> dict[str, str]:
     """Seed one clinic, one clinician, and one empty patient idempotently."""
     settings = get_settings()
 
@@ -183,7 +183,7 @@ def seed_phase0(db: Session) -> dict[str, str]:
             full_name=DEFAULT_PATIENT_NAME,
             dob=DEFAULT_PATIENT_DOB,
             consent_version=DEFAULT_CONSENT_VERSION,
-            notes="Phase 0 seeded patient (no visits yet).",
+            notes="Initial intake patient (no visits recorded yet).",
         )
         db.add(patient)
         db.flush()
@@ -200,7 +200,7 @@ def seed_phase0(db: Session) -> dict[str, str]:
 
 def seed_demo_longitudinal(db: Session) -> dict[str, Any]:
     """Seed the 3-visit longitudinal demo patient (~90 days) idempotently."""
-    base_info = seed_phase0(db)
+    base_info = seed_baseline(db)
     clinic = db.execute(
         select(Clinic).where(Clinic.name == DEFAULT_CLINIC_NAME)
     ).scalar_one()

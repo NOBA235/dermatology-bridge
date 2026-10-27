@@ -49,3 +49,4 @@ __all__ = [
     "render_top_concern_chart_png_base64",
     "render_top_concern_chart_png_bytes",
 ]
+

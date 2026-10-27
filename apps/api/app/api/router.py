@@ -1,7 +1,8 @@
-"""Protected /api/* routes."""
+"""Protected /api/* routes (and token-scoped /api/capture/*)."""
 
 from fastapi import APIRouter, Depends
 
+from app.api.capture import router as capture_router
 from app.api.patients import router as patients_router
 from app.api.visits import router as visits_router
 from app.auth.middleware import get_current_clinician
@@ -11,6 +12,7 @@ from app.db.models import Clinician
 router = APIRouter(prefix="/api", tags=["api"])
 router.include_router(visits_router)
 router.include_router(patients_router)
+router.include_router(capture_router)
 
 
 @router.get("/me", response_model=ClinicianOut)

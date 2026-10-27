@@ -1,4 +1,4 @@
-"""Phase 3 exit criteria and unit tests for flags prioritization, agent narration, and grounding validation."""
+"""Concern prioritization, grounded narrative generation, and numeric validator tests."""
 
 from typing import Any
 import uuid

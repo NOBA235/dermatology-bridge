@@ -9,6 +9,8 @@ import jwt
 
 from app.config import get_settings
 
+CAPTURE_TOKEN_DEFAULT_TTL_MINUTES = 30
+
 
 def hash_password(plain_password: str) -> str:
     """Hash a clinician password using bcrypt."""
@@ -47,6 +49,7 @@ def create_access_token(
         "sub": str(clinician_id),
         "clinic_id": str(clinic_id),
         "email": email,
+        "purpose": "clinician_auth",
         "iat": int(now.timestamp()),
         "exp": int(expire.timestamp()),
     }
@@ -66,3 +69,37 @@ def decode_access_token(token: str) -> dict[str, Any]:
         algorithms=[settings.JWT_ALGORITHM],
     )
 
+
+def create_capture_token(
+    *,
+    patient_id: uuid.UUID,
+    clinic_id: uuid.UUID,
+    clinician_id: uuid.UUID,
+    ttl_minutes: int = CAPTURE_TOKEN_DEFAULT_TTL_MINUTES,
+) -> str:
+    """Issue a signed, short-lived HS256 capture token for patient mobile selfie upload."""
+    settings = get_settings()
+    now = datetime.now(timezone.utc)
+    expire = now + timedelta(minutes=ttl_minutes)
+    payload: dict[str, Any] = {
+        "sub": str(patient_id),
+        "patient_id": str(patient_id),
+        "clinic_id": str(clinic_id),
+        "issued_by": str(clinician_id),
+        "purpose": "patient_capture",
+        "iat": int(now.timestamp()),
+        "exp": int(expire.timestamp()),
+    }
+    return jwt.encode(
+        payload,
+        settings.JWT_SECRET_KEY,
+        algorithm=settings.JWT_ALGORITHM,
+    )
+
+
+def decode_capture_token(token: str) -> dict[str, Any]:
+    """Verify and decode a signed patient capture token."""
+    claims = decode_access_token(token)
+    if claims.get("purpose") != "patient_capture":
+        raise jwt.InvalidTokenError("Token is not a valid patient_capture token.")
+    return claims

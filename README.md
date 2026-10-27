@@ -18,10 +18,11 @@ Dermatology Bridge is a clinician-facing longitudinal skin decision-support tool
 
 - `apps/api` — FastAPI + SQLAlchemy 2.x + Pydantic v2 + Alembic backend
 - `apps/web` — Next.js 14 App Router + TypeScript + Tailwind CSS frontend
-- `docs/` — Architecture, API contract, and technical debt records
+- `docs/` — API contract and architecture documentation
 - `fixtures/` — Mock YouCam payloads and synthetic test fixtures
+- `templates/` — Consultation PDF report HTML/CSS and deterministic narrative fallback template
 
-## Phase 0 Quickstart
+## Quickstart
 
 ### Backend (`apps/api`)
 
@@ -40,4 +41,3 @@ cd apps/web
 npm install
 npm run dev
 ```
-

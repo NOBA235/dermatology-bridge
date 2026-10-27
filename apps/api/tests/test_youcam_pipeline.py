@@ -1,4 +1,4 @@
-"""Phase 1 exit criteria and working-agreement tests for the YouCam API spine."""
+"""YouCam S2S v2.0 client, mock pipeline, unit budget ledger, and visit ingestion tests."""
 
 import csv
 import json
@@ -22,7 +22,7 @@ from app.domain.concerns import (
     CONCERN_LIST,
     score_to_severity,
 )
-from app.scripts.seed import seed_phase0
+from app.scripts.seed import seed_baseline
 from app.services.storage import PrivateStorageService
 from app.services.youcam import (
     LiveYouCamClient,
@@ -206,7 +206,7 @@ def test_post_visits_pipeline_and_unit_budget_csv(
     tmp_path: Path,
 ) -> None:
     """Exit criteria 1, 2, 3, 4: Full POST /api/visits flow in mock mode + 12 concern_scores + CSV arithmetic."""
-    seed_summary = seed_phase0(migrated_db_session)
+    seed_summary = seed_baseline(migrated_db_session)
     patient_id = seed_summary["patient_id"]
     settings = Settings(_env_file=None)
 
@@ -301,7 +301,7 @@ def test_post_visits_failure_path_sets_failed_status(
     tmp_path: Path,
 ) -> None:
     """Exit criterion 5: A failed task sets youcam_status='failed' and surfaces a clean error to the caller."""
-    seed_summary = seed_phase0(migrated_db_session)
+    seed_summary = seed_baseline(migrated_db_session)
     patient_id = seed_summary["patient_id"]
     settings = Settings(_env_file=None)
 

@@ -1,4 +1,4 @@
-"""Phase 2 exit criteria and unit tests for the longitudinal layer."""
+"""Longitudinal visit history, trend series, MDC verdict rules, and demo seed tests."""
 
 from datetime import date
 from decimal import Decimal
@@ -12,7 +12,7 @@ from app.db.models import ConcernScore, Visit
 from app.domain.concerns import ANALYSIS_VERSION, CONCERN_LIST
 from app.domain.flags import MDC_TABLE, MIN_DAYS_BETWEEN, MIN_VISITS, compute_verdict
 from app.domain.severity import map_score_to_severity
-from app.scripts.seed import seed_demo_longitudinal, seed_phase0
+from app.scripts.seed import seed_demo_longitudinal, seed_baseline
 
 
 def _auth_headers(client: TestClient, settings: Settings) -> dict[str, str]:
@@ -155,7 +155,7 @@ def test_trends_endpoint_survives_single_visit_patient(
     migrated_db_session: Session,
 ) -> None:
     """Exit criterion 5: Trends endpoint survives a patient with only 1 visit (returns nulls, no crash)."""
-    seed_info = seed_phase0(migrated_db_session)
+    seed_info = seed_baseline(migrated_db_session)
     patient_id = uuid.UUID(seed_info["patient_id"])
     settings = Settings(_env_file=None)
     headers = _auth_headers(client, settings)
@@ -208,7 +208,7 @@ def test_trends_endpoint_rejects_mismatched_analysis_version(
     migrated_db_session: Session,
 ) -> None:
     """Verify belt-and-braces invariant: visits with different analysis_version cannot be trended."""
-    seed_info = seed_phase0(migrated_db_session)
+    seed_info = seed_baseline(migrated_db_session)
     patient_id = uuid.UUID(seed_info["patient_id"])
     settings = Settings(_env_file=None)
     headers = _auth_headers(client, settings)

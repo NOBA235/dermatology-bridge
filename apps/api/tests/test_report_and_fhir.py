@@ -1,4 +1,4 @@
-"""Phase 4 exit criteria tests for the 3-page A4 PDF report and FHIR Observation export."""
+"""Three-page A4 consultation PDF report and FHIR R4 Observation export tests."""
 
 import re
 import uuid
@@ -168,3 +168,4 @@ def test_fhir_export_validates_against_observation_schema(
         seen_concerns.add(obs.code.coding[0].code)
 
     assert seen_concerns == set(CONCERN_LIST)
+

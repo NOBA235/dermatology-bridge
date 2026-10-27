@@ -233,3 +233,4 @@ def render_mask_placeholder_png_base64(concern: str, *, is_cached: bool = False)
     png_bytes = render_mask_placeholder_png_bytes(concern, is_cached=is_cached)
     encoded = base64.b64encode(png_bytes).decode("ascii")
     return f"data:image/png;base64,{encoded}"
+

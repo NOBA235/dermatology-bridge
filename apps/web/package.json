@@ -2,25 +2,25 @@
   "name": "dermobridge-web",
   "version": "0.1.0",
   "private": true,
-  "description": "Dermatology Bridge — Clinician decision-support web client (Phase 0 skeleton; UI built in Phase 5)",
+  "description": "Dermatology Bridge — Clinician decision-support dashboard and guided patient capture (Next.js 14 App Router)",
   "scripts": {
-    "dev": "node -e \"const http=require('http');const s=http.createServer((_,res)=>{res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({status:'phase-0-skeleton',disclaimer:'For clinician review — not a diagnosis.'}));});s.listen(3000,()=>console.log('dermobridge-web Phase 0 skeleton listening on http://localhost:3000'));\"",
-    "build": "echo \"Phase 0 skeleton — Next.js App Router UI scheduled for Phase 5\"",
-    "lint": "echo \"Phase 0 skeleton\""
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "start": "next start -p 3000",
+    "lint": "next lint"
   },
   "dependencies": {
-    "next": "^14.2.0",
-    "react": "^18.3.0",
-    "react-dom": "^18.3.0"
+    "next": "14.2.15",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
-    "@types/react": "^18.3.0",
+    "@types/node": "^20.14.0",
+    "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
-    "autoprefixer": "^10.4.0",
-    "postcss": "^8.4.0",
-    "tailwindcss": "^3.4.0",
-    "typescript": "^5.4.0"
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.4",
+    "typescript": "^5.5.2"
   }
 }
-

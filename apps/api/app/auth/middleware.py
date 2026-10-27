@@ -15,7 +15,7 @@ from app.db.session import get_db
 
 
 class JWTAuthMiddleware(BaseHTTPMiddleware):
-    """Enforce valid Bearer JWT on all /api/* routes while leaving /health and /auth/* public."""
+    """Enforce valid clinician Bearer JWT on /api/* routes (except token-signed /api/capture/*)."""
 
     async def dispatch(
         self,
@@ -27,8 +27,12 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
         if request.method == "OPTIONS":
             return await call_next(request)
 
-        # Public routes: /health, /auth/*, and OpenAPI docs
-        if path == "/health" or path.startswith("/auth"):
+        # Public or token-scoped routes: /health, /auth/*, and /api/capture/*
+        if (
+            path == "/health"
+            or path.startswith("/auth")
+            or path.startswith("/api/capture/")
+        ):
             return await call_next(request)
 
         if path.startswith("/api"):
@@ -60,6 +64,13 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
                 return JSONResponse(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     content={"detail": "Invalid authentication token."},
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+
+            if claims.get("purpose") == "patient_capture":
+                return JSONResponse(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    content={"detail": "Patient capture token cannot be used for clinician API routes."},
                     headers={"WWW-Authenticate": "Bearer"},
                 )
 
@@ -95,4 +106,3 @@ def get_current_clinician(
             detail="Clinician account not found.",
         )
     return clinician
-

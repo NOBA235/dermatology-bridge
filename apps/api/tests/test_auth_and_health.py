@@ -1,4 +1,4 @@
-"""Phase 0 exit criteria verification tests."""
+"""Authentication, database migration, seed idempotency, and health check tests."""
 
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
@@ -16,7 +16,7 @@ from app.db.models import (
     TreatmentFlag,
     Visit,
 )
-from app.scripts.seed import seed_phase0
+from app.scripts.seed import seed_baseline
 
 
 def test_health_returns_200_with_db_connectivity(client: TestClient) -> None:
@@ -50,8 +50,8 @@ def test_migration_applies_to_clean_db_in_one_command(
 
 def test_seed_script_idempotent(migrated_db_session: Session) -> None:
     """Exit criterion 3: Seed script idempotent; running twice doesn't duplicate."""
-    first = seed_phase0(migrated_db_session)
-    second = seed_phase0(migrated_db_session)
+    first = seed_baseline(migrated_db_session)
+    second = seed_baseline(migrated_db_session)
 
     assert first == second
 
@@ -81,7 +81,7 @@ def test_login_jwt_and_protected_route_enforcement(
     migrated_db_session: Session,
 ) -> None:
     """Exit criterion 4: Login returns a JWT; protected route rejects without it and accepts with it."""
-    seed_phase0(migrated_db_session)
+    seed_baseline(migrated_db_session)
     settings = get_settings()
 
     # Protected route rejects without Authorization header
