@@ -8,7 +8,7 @@ from sqlalchemy import pool
 from app.config import get_settings
 from app.db.base import Base
 import app.db.models  # noqa: F401 — ensure all models are registered on Base.metadata
-from app.db.session import build_engine
+from app.db.session import build_engine, normalize_database_url
 
 config = context.config
 
@@ -21,9 +21,8 @@ target_metadata = Base.metadata
 def get_database_url() -> str:
     """Resolve database URL from alembic config override or pydantic-settings."""
     configured = config.get_main_option("sqlalchemy.url")
-    if configured:
-        return configured
-    return get_settings().DATABASE_URL
+    raw_url = configured if configured else get_settings().DATABASE_URL
+    return normalize_database_url(raw_url)
 
 
 def run_migrations_offline() -> None:
@@ -65,4 +64,3 @@ if context.is_offline_mode():
     run_migrations_offline()
 else:
     run_migrations_online()
-
