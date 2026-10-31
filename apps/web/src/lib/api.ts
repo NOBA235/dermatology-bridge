@@ -9,7 +9,9 @@ export const PRIVACY_NOTICE =
   "Photos are stored privately and deletable on request.";
 
 export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000";
+  process.env.NEXT_PUBLIC_API_BASE_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  "http://localhost:8000";
 
 const TOKEN_STORAGE_KEY = "dermobridge_clinician_jwt";
 const CLINICIAN_STORAGE_KEY = "dermobridge_clinician_profile";
@@ -134,6 +136,17 @@ export interface CaptureSessionInfo {
 export function getStoredToken(): string | null {
   if (typeof window === "undefined") return null;
   return window.localStorage.getItem(TOKEN_STORAGE_KEY);
+}
+
+export function getStoredClinician(): ClinicianProfile | null {
+  if (typeof window === "undefined") return null;
+  const raw = window.localStorage.getItem(CLINICIAN_STORAGE_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as ClinicianProfile;
+  } catch {
+    return null;
+  }
 }
 
 export function setStoredSession(

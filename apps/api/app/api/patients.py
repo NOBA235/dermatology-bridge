@@ -158,6 +158,18 @@ def get_patient_detail(
     return _to_patient_out(patient)
 
 
+@router.delete("/{patient_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_patient(
+    patient_id: uuid.UUID,
+    clinician: Clinician = Depends(get_current_clinician),
+    db: Session = Depends(get_db),
+) -> None:
+    """Delete a patient record and all associated visits, scores, flags, and medications."""
+    patient = _get_authorized_patient(db, patient_id, clinician)
+    db.delete(patient)
+    db.commit()
+
+
 @router.post("/{patient_id}/capture-token", response_model=CaptureTokenOut)
 def generate_patient_capture_token(
     patient_id: uuid.UUID,

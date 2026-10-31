@@ -7,6 +7,7 @@ import base64
 from decimal import Decimal
 import io
 from pathlib import Path
+import textwrap
 from typing import Any
 import uuid
 
@@ -390,47 +391,63 @@ def _render_matplotlib_page_png(
 
         ax.text(
             0,
-            24.0,
+            24.5,
             "Encounter Timeline:",
             fontsize=9,
             fontweight="bold",
             color="#0f172a",
         )
-        vy = 20.5
+        vy = 21.0
         for v in context["visits"]:
+            visit_line = (
+                f"{v['visit_date']} — Complaint: {v['chief_complaint'] or 'None'} | "
+                f"Regimen: {v['treatment_changes'] or v['routine_text'] or 'None'}"
+            )
+            wrapped_visit = textwrap.fill(visit_line, width=118)
             ax.text(
                 0,
                 vy,
-                f"{v['visit_date']}: {v['chief_complaint'] or ''} | Regimen: {v['treatment_changes'] or ''}"[:115],
-                fontsize=7.0,
+                wrapped_visit,
+                fontsize=6.8,
                 color="#334155",
+                verticalalignment="top",
             )
-            vy -= 4.2
+            vy -= 5.2
 
     else:
         ax.text(
             0,
             90.8,
-            "Treatment-Response Flags & Grounded Attribution Hypotheses",
+            "Treatment-Response Flags & Grounded Attribution Hypotheses (Clinician Review)",
             fontsize=10,
             fontweight="bold",
             color="#0f172a",
         )
+        wrapped_summary = textwrap.fill(
+            f"Summary: {context['narrative_summary']}", width=122
+        )
         ax.text(
             0,
-            87.2,
-            f"Summary: {context['narrative_summary'][:130]}",
-            fontsize=7.5,
+            88.2,
+            wrapped_summary,
+            fontsize=7.2,
             color="#0f172a",
+            verticalalignment="top",
         )
-        fy = 81.5
+        fy = 80.5
         for f in context["flag_rows"]:
+            flag_line = (
+                f"{f['label']} [{f['verdict'].upper()}, Delta {f['delta']}]: "
+                f"{f['hypothesis']}"
+            )
+            wrapped_flag = textwrap.fill(flag_line, width=124)
             ax.text(
                 0,
                 fy,
-                f"{f['label']} [{f['verdict'].upper()}, Delta {f['delta']}]: {f['hypothesis'][:105]}",
-                fontsize=6.8,
+                wrapped_flag,
+                fontsize=6.5,
                 color="#1e293b",
+                verticalalignment="top",
             )
             fy -= 6.1
 

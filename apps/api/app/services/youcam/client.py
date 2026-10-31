@@ -9,14 +9,22 @@ import csv
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
+import io
+import json
 from pathlib import Path
 import time
 from typing import Any, Protocol
+import zipfile
 
 import httpx
 
 from app.config import REPO_ROOT
-from app.domain.concerns import ANALYSIS_VERSION, CONCERN_LIST, score_to_severity
+from app.domain.concerns import (
+    ANALYSIS_VERSION,
+    CONCERN_DIRECTION,
+    CONCERN_LIST,
+    score_to_severity,
+)
 
 UNIT_BUDGET_LIMIT = 1000
 DEFAULT_UNIT_BUDGET_CSV = REPO_ROOT / "logs" / "unit_budget.csv"
@@ -24,6 +32,16 @@ DEFAULT_UNIT_BUDGET_CSV = REPO_ROOT / "logs" / "unit_budget.csv"
 INITIAL_POLL_INTERVAL_SECONDS = 2.0
 MAX_POLL_INTERVAL_SECONDS = 30.0
 POLL_TIMEOUT_SECONDS = 90.0
+
+# Mapping between frozen internal concern keys and Perfect Corp S2S v2.0 SD action names
+_INTERNAL_TO_YOUCAM_ACTION: dict[str, str] = {
+    "pores": "pore",
+    "dark_spot": "age_spot",
+    "skin_tone": "eye_bag",
+}
+_YOUCAM_TO_INTERNAL_ACTION: dict[str, str] = {
+    v: k for k, v in _INTERNAL_TO_YOUCAM_ACTION.items()
+}
 
 
 class YouCamError(Exception):
@@ -33,7 +51,13 @@ class YouCamError(Exception):
 class YouCamTaskFailedError(YouCamError):
     """Raised when a YouCam skin-analysis task transitions to 'error' or 'failed'."""
 
-    def __init__(self, message: str, *, task_id: str | None = None, raw_result: dict[str, Any] | None = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        task_id: str | None = None,
+        raw_result: dict[str, Any] | None = None,
+    ) -> None:
         super().__init__(message)
         self.task_id = task_id
         self.raw_result = raw_result
@@ -153,6 +177,61 @@ def compute_backoff_delay(
     return min(raw_delay, max_delay)
 
 
+def _normalize_live_score_info(
+    score_info: dict[str, Any],
+    masks_list: list[Any] | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Normalize Perfect Corp score_info.json dictionary into internal concern keys."""
+    by_concern: dict[str, dict[str, Any]] = {}
+    mask_by_concern = {
+        m.get("concern"): m.get("mask_url")
+        for m in (masks_list or [])
+        if isinstance(m, dict) and isinstance(m.get("concern"), str)
+    }
+
+    source_map = score_info.get("concerns")
+    if not isinstance(source_map, dict):
+        source_map = score_info
+
+    for raw_key, c_val in source_map.items():
+        if not isinstance(c_val, dict):
+            continue
+        internal_key = _YOUCAM_TO_INTERNAL_ACTION.get(raw_key, raw_key)
+        if internal_key not in CONCERN_DIRECTION:
+            continue
+
+        raw_val = c_val.get("score")
+        if raw_val is None:
+            raw_val = c_val.get("ui_score")
+        if raw_val is None:
+            raw_val = c_val.get("raw_score")
+        if raw_val is None:
+            continue
+
+        num_val = float(raw_val)
+        # Live YouCam score_info.json reports 0..100 health scores (100 = clearest skin)
+        # with 'output_mask_name' or 'raw_score' > 1. Convert to symptom burden for lower_is_better.
+        is_live_health_scale = (
+            "output_mask_name" in c_val
+            or "ui_score" in c_val
+            and "concern" not in c_val
+            and "type" not in c_val
+        )
+        if (
+            is_live_health_scale
+            and CONCERN_DIRECTION[internal_key] == "lower_is_better"
+        ):
+            num_val = max(0.0, min(100.0, 100.0 - num_val))
+
+        by_concern[internal_key] = {
+            "concern": internal_key,
+            "score": round(num_val, 2),
+            "mask_url": c_val.get("mask_url") or mask_by_concern.get(internal_key),
+        }
+
+    return by_concern
+
+
 def parse_youcam_raw_result(raw_result: dict[str, Any]) -> list[ParsedConcernScore]:
     """Extract and validate all 12 frozen concerns from a YouCam S2S v2.0 raw payload."""
     envelope = raw_result.get("result") or raw_result.get("data") or {}
@@ -166,25 +245,20 @@ def parse_youcam_raw_result(raw_result: dict[str, Any]) -> list[ParsedConcernSco
                 continue
             concern_key = item.get("concern") or item.get("type")
             if isinstance(concern_key, str):
-                by_concern[concern_key] = item
+                internal_key = _YOUCAM_TO_INTERNAL_ACTION.get(concern_key, concern_key)
+                by_concern[internal_key] = item
     elif isinstance(results_node, dict):
-        # Support alternative score_info.concerns + masks shape documented in contract
-        score_info = results_node.get("score_info", {})
-        concerns_map = score_info.get("concerns", {})
+        score_info = (
+            envelope.get("score_info")
+            or results_node.get("score_info")
+            or results_node
+        )
         masks_list = results_node.get("masks", [])
-        mask_by_concern = {
-            m.get("concern"): m.get("mask_url")
-            for m in masks_list
-            if isinstance(m, dict) and isinstance(m.get("concern"), str)
-        }
-        if isinstance(concerns_map, dict):
-            for c_key, c_val in concerns_map.items():
-                if isinstance(c_val, dict):
-                    by_concern[c_key] = {
-                        "concern": c_key,
-                        "score": c_val.get("score") or c_val.get("ui_score"),
-                        "mask_url": c_val.get("mask_url") or mask_by_concern.get(c_key),
-                    }
+        if isinstance(score_info, dict):
+            by_concern.update(_normalize_live_score_info(score_info, masks_list))
+
+    if not by_concern and isinstance(envelope.get("score_info"), dict):
+        by_concern.update(_normalize_live_score_info(envelope["score_info"]))
 
     parsed: list[ParsedConcernScore] = []
     missing: list[str] = []
@@ -289,7 +363,7 @@ class LiveYouCamClient:
         filename: str = "selfie.jpg",
         content_type: str = "image/jpeg",
     ) -> str:
-        """POST /s2s/v2.0/file -> returns result.file_id."""
+        """POST /s2s/v2.0/file -> returns file_id and uploads binary to presigned S3 URL."""
         payload = {
             "files": [
                 {
@@ -313,13 +387,26 @@ class LiveYouCamClient:
             result = body.get("result") or body.get("data") or {}
             file_id = result.get("file_id")
             requests_list = result.get("requests") or []
+
+            # Support Perfect Corp S2S v2.0 nested data.files[0] structure
+            files_list = result.get("files")
+            if isinstance(files_list, list) and files_list and isinstance(files_list[0], dict):
+                first_file = files_list[0]
+                if not file_id:
+                    file_id = first_file.get("file_id")
+                if not requests_list:
+                    requests_list = first_file.get("requests") or []
+
             if not file_id and requests_list and isinstance(requests_list[0], dict):
                 file_id = requests_list[0].get("file_id")
 
             # If S2S v2.0 returns a presigned upload target in requests[0].url, PUT the bytes
             if requests_list and isinstance(requests_list[0], dict):
                 put_url = requests_list[0].get("url")
-                put_headers = requests_list[0].get("headers") or {"Content-Type": content_type}
+                raw_put_headers = requests_list[0].get("headers") or {
+                    "Content-Type": content_type
+                }
+                put_headers = {str(k): str(v) for k, v in raw_put_headers.items()}
                 if put_url:
                     put_resp = await client.put(
                         put_url, content=image_bytes, headers=put_headers
@@ -340,14 +427,16 @@ class LiveYouCamClient:
         dst_actions: tuple[str, ...] = CONCERN_LIST,
         prerender: bool = True,
     ) -> str:
-        """POST /s2s/v2.0/task/skin-analysis -> returns result.task_id and logs unit cost."""
-        request_body = {
+        """POST /s2s/v2.0/task/skin-analysis -> returns task_id and logs unit cost."""
+        live_actions = [_INTERNAL_TO_YOUCAM_ACTION.get(a, a) for a in dst_actions]
+        request_body: dict[str, Any] = {
             "src_file_id": src_file_id,
-            "dst_actions": list(dst_actions),
-            "prerender": prerender,
-            "analysis_version": ANALYSIS_VERSION,
+            "dst_actions": live_actions,
             "format": "json",
         }
+        if prerender:
+            request_body["miniserver_args"] = {"enable_mask_overlay": True}
+
         async with self._client_context() as client:
             resp = await client.post(
                 f"{self.base_url}/s2s/v2.0/task/skin-analysis",
@@ -355,8 +444,9 @@ class LiveYouCamClient:
                 json=request_body,
             )
             if resp.status_code >= 400:
+                detail = resp.text[:300]
                 raise YouCamError(
-                    f"YouCam create_task failed with HTTP {resp.status_code}"
+                    f"YouCam create_task failed with HTTP {resp.status_code}: {detail}"
                 )
             body = resp.json()
             result = body.get("result") or body.get("data") or {}
@@ -396,11 +486,18 @@ class LiveYouCamClient:
                 ).lower()
 
                 if task_status == "success":
+                    results_node = result.get("results")
+                    if isinstance(results_node, dict) and isinstance(
+                        results_node.get("url"), str
+                    ):
+                        bundle_url = results_node["url"]
+                        await self._hydrate_results_bundle(client, result, bundle_url)
                     return raw_payload
 
                 if task_status in ("error", "failed"):
                     err_msg = (
                         result.get("error_message")
+                        or result.get("error")
                         or result.get("error_code")
                         or "YouCam skin-analysis task failed."
                     )
@@ -420,6 +517,32 @@ class LiveYouCamClient:
 
                 await self._sleep_fn(delay)
                 attempt += 1
+
+    async def _hydrate_results_bundle(
+        self,
+        client: httpx.AsyncClient,
+        result_envelope: dict[str, Any],
+        bundle_url: str,
+    ) -> None:
+        """Download and unpack YouCam presigned ZIP or JSON result bundle into score_info."""
+        bundle_resp = await client.get(bundle_url)
+        if bundle_resp.status_code >= 400:
+            raise YouCamError(
+                f"Failed to download YouCam result bundle (HTTP {bundle_resp.status_code})"
+            )
+        content = bundle_resp.content
+        if content.startswith(b"PK\x03\x04"):
+            with zipfile.ZipFile(io.BytesIO(content)) as zf:
+                for name in zf.namelist():
+                    if name.endswith("score_info.json") or name.endswith(".json"):
+                        raw_json = json.loads(zf.read(name).decode("utf-8"))
+                        if isinstance(raw_json, dict):
+                            result_envelope["score_info"] = raw_json
+                            break
+        else:
+            raw_json = bundle_resp.json()
+            if isinstance(raw_json, dict):
+                result_envelope["score_info"] = raw_json
 
     async def analyze_image(
         self,
@@ -445,7 +568,8 @@ class LiveYouCamClient:
     def _client_context(self) -> Any:
         if self._http_client is not None:
             return _BorrowedAsyncClient(self._http_client)
-        return httpx.AsyncClient(timeout=30.0)
+        transport = httpx.AsyncHTTPTransport(local_address="0.0.0.0")
+        return httpx.AsyncClient(transport=transport, timeout=30.0)
 
 
 class _BorrowedAsyncClient:

@@ -40,12 +40,12 @@
         </div>
       </div>
 
-      <h2 class="section-heading">12-Concern Longitudinal Snapshot Grid</h2>
+      <h2 class="section-heading">12-Concern Longitudinal Snapshot Grid (0–100 Scale &bull; Observed Measurements)</h2>
       <table class="snapshot-table">
         <thead>
           <tr>
             <th>Concern</th>
-            <th>Direction</th>
+            <th>Direction &amp; MDC</th>
             <th>Baseline</th>
             <th>Latest</th>
             <th>&Delta; vs Base</th>
@@ -58,7 +58,7 @@
           {% for item in snapshot_rows %}
           <tr data-concern="{{ item.concern }}">
             <td><strong>{{ item.label }}</strong> <span style="color:#64748b;">({{ item.concern }})</span></td>
-            <td>{{ "Higher = Better" if item.direction == "higher_is_better" else "Lower = Better" }}</td>
+            <td>{{ "↑ Higher = Better" if item.direction == "higher_is_better" else "↓ Lower = Better" }} <span style="color:#64748b;">(&plusmn;{{ item.mdc }})</span></td>
             <td>{{ item.baseline_score if item.baseline_score is not none else "—" }}</td>
             <td>{{ item.latest_score if item.latest_score is not none else "—" }}</td>
             <td>{{ item.delta if item.delta is not none else "—" }}</td>
@@ -112,7 +112,7 @@
           <div>
             <strong>#{{ loop.index }} — {{ top.label }} ({{ top.concern }})</strong>
             <span style="color:#475569; font-size:8pt; margin-left:6px;">
-              Baseline: {{ top.baseline_score }} &rarr; Latest: {{ top.latest_score }} (&Delta; {{ top.delta }}, MDC {{ top.mdc }})
+              Baseline: {{ top.baseline_score }} &rarr; Latest: {{ top.latest_score }} (&Delta; {{ top.delta }}, MDC &plusmn;{{ top.mdc }})
             </span>
           </div>
           <div>
@@ -185,12 +185,12 @@
 
       <div class="disclaimer-banner">{{ disclaimer }}</div>
 
-      <h2 class="section-heading">Grounded Longitudinal Summary</h2>
+      <h2 class="section-heading">Grounded Longitudinal Summary (Generated Hypothesis &bull; Non-Diagnostic)</h2>
       <div class="narrative-box">
         {{ narrative_summary }}
       </div>
 
-      <h2 class="section-heading">Per-Concern Attribution Hypotheses (Clinician Review)</h2>
+      <h2 class="section-heading">Per-Concern Attribution Hypotheses (For Clinician Review — Not Causal)</h2>
       <table class="hypothesis-table">
         <thead>
           <tr>
@@ -220,4 +220,3 @@
   </section>
 </body>
 </html>
-

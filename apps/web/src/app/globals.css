@@ -2,7 +2,85 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Native modal dialog scroll containment per modern-web-guidance 'dialog' */
+:root {
+  /* Surface Tokens */
+  --surface-canvas: #f8fafc;
+  --surface-card: #ffffff;
+  --surface-subtle: #f1f5f9;
+  --surface-inset: #e2e8f0;
+
+  /* Ink / Typography Tokens (WCAG 2.2 AA/AAA contrast on white & subtle surfaces) */
+  --ink-primary: #0f172a;
+  --ink-secondary: #334155;
+  --ink-muted: #475569;
+
+  /* Clinical Primary Action Tokens */
+  --clinical-accent: #0369a1;
+  --clinical-accent-hover: #075985;
+  --clinical-accent-soft: #f0f9ff;
+  --clinical-accent-border: #bae6fd;
+
+  /* Semantic Clinical Trajectory & Severity Tokens */
+  --status-improving-ink: #14532d;
+  --status-improving-bg: #f0fdf4;
+  --status-improving-border: #86efac;
+
+  --status-stable-ink: #334155;
+  --status-stable-bg: #f1f5f9;
+  --status-stable-border: #cbd5e1;
+
+  --status-caution-ink: #78350f;
+  --status-caution-bg: #fffbeb;
+  --status-caution-border: #fcd34d;
+
+  --status-worsening-ink: #881337;
+  --status-worsening-bg: #fff1f2;
+  --status-worsening-border: #fda4af;
+
+  /* Focus Ring Token (WCAG 2.2 AA 2.4.11 / 2.4.13 high-visibility indicator) */
+  --focus-ring-color: #0284c7;
+}
+
+@layer base {
+  body {
+    background-color: var(--surface-canvas);
+    color: var(--ink-primary);
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /* Unobscured, high-contrast keyboard focus across all interactive elements */
+  a:focus-visible,
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  summary:focus-visible,
+  [tabindex]:focus-visible {
+    outline: 2px solid var(--focus-ring-color);
+    outline-offset: 2px;
+  }
+}
+
+/* Skip link for keyboard navigation (WCAG 2.4.1) */
+.skip-link {
+  position: absolute;
+  inset-block-start: -999px;
+  inset-inline-start: 1rem;
+  z-index: 100;
+  background: #0f172a;
+  color: #ffffff;
+  padding: 0.625rem 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.25);
+}
+
+.skip-link:focus {
+  inset-block-start: 0.75rem;
+}
+
+/* Native modal dialog scroll containment per modern-web-guidance 'dialog' & 'prevent-page-scroll-under-modal-dialog' */
 dialog:modal {
   overscroll-behavior: contain;
 }
@@ -10,14 +88,37 @@ dialog:modal {
 dialog::backdrop {
   overflow: hidden;
   overscroll-behavior: contain;
-  background: rgba(15, 23, 42, 0.55);
+  background: rgba(15, 23, 42, 0.58);
+  backdrop-filter: blur(1px);
+}
+
+/* Post-interaction input validation per modern-web-guidance 'validate-input-after-interaction' */
+.clinical-input:user-invalid {
+  border-color: #be123c;
+  background-color: #fff1f2;
+}
+
+.clinical-input:user-valid {
+  border-color: #94a3b8;
+}
+
+.field-error-msg {
+  display: none;
+  color: #9f1239;
+  font-size: 0.75rem;
+  font-weight: 500;
+  margin-top: 0.25rem;
+}
+
+.clinical-input:user-invalid + .field-error-msg {
+  display: block;
 }
 
 /* Responsive data table per modern-web-guidance 'responsive-table' */
 .table-wrapper {
   overflow: auto;
   max-inline-size: 100%;
-  max-block-size: min(640px, 82vh);
+  max-block-size: min(680px, 84vh);
   container-type: inline-size;
 }
 
@@ -30,16 +131,21 @@ dialog::backdrop {
 .responsive-data-table thead {
   position: sticky;
   inset-block-start: 0;
-  z-index: 1;
+  z-index: 2;
 }
 
 .responsive-data-table tbody th {
   position: sticky;
   inset-inline-start: 0;
+  z-index: 1;
   background: #ffffff;
 }
 
-@container (width < 600px) {
+.responsive-data-table tbody tr:hover th {
+  background: #f8fafc;
+}
+
+@container (width < 640px) {
   .responsive-data-table,
   .responsive-data-table thead,
   .responsive-data-table tbody,
@@ -50,14 +156,21 @@ dialog::backdrop {
   }
 
   .responsive-data-table thead {
+    /* MANDATORY: Hide column header from layout and screen readers on narrow containers */
     display: none;
   }
 
-  .responsive-data-table tr {
-    margin-block-end: 1rem;
+  .responsive-data-table tbody tr {
+    margin-block-end: 0.875rem;
     border: 1px solid #cbd5e1;
-    border-radius: 0.5rem;
+    border-radius: 0.625rem;
+    background: #ffffff;
     overflow: hidden;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  }
+
+  .responsive-data-table tbody tr:last-child {
+    margin-block-end: 0;
   }
 
   .responsive-data-table tbody th {
@@ -65,42 +178,57 @@ dialog::backdrop {
     inset-block-start: 0;
     z-index: 2;
     background: #f1f5f9;
+    border-block-end: 1px solid #e2e8f0;
+    padding: 0.75rem 1rem;
+  }
+
+  .responsive-data-table td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.625rem 1rem;
+    border-block-end: 1px solid #f1f5f9;
+    text-align: right;
+  }
+
+  .responsive-data-table td:last-child {
+    border-block-end: none;
+  }
+
+  .responsive-data-table td::before {
+    font-weight: 600;
+    font-size: 0.75rem;
+    color: #475569;
+    text-align: left;
+    flex-shrink: 0;
   }
 
   .responsive-data-table td:nth-child(2)::before {
-    content: var(--label-2, "Direction") ": ";
-    font-weight: 600;
-    color: #475569;
+    content: var(--label-2, "Field 2") ": ";
   }
 
   .responsive-data-table td:nth-child(3)::before {
-    content: var(--label-3, "Baseline") ": ";
-    font-weight: 600;
-    color: #475569;
+    content: var(--label-3, "Field 3") ": ";
   }
 
   .responsive-data-table td:nth-child(4)::before {
-    content: var(--label-4, "Latest") ": ";
-    font-weight: 600;
-    color: #475569;
+    content: var(--label-4, "Field 4") ": ";
   }
 
   .responsive-data-table td:nth-child(5)::before {
-    content: var(--label-5, "Delta") ": ";
-    font-weight: 600;
-    color: #475569;
+    content: var(--label-5, "Field 5") ": ";
   }
 
   .responsive-data-table td:nth-child(6)::before {
-    content: var(--label-6, "Severity") ": ";
-    font-weight: 600;
-    color: #475569;
+    content: var(--label-6, "Field 6") ": ";
   }
 
   .responsive-data-table td:nth-child(7)::before {
-    content: var(--label-7, "Verdict") ": ";
-    font-weight: 600;
-    color: #475569;
+    content: var(--label-7, "Field 7") ": ";
+  }
+
+  .responsive-data-table td:nth-child(8)::before {
+    content: var(--label-8, "Field 8") ": ";
   }
 }
-
