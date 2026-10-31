@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.auth.jwt import hash_password
 from app.config import get_settings
-from app.db.models import Clinic, Clinician, ConcernScore, Patient, Visit
+from app.db.models import Clinic, Clinician, ConcernScore, Patient, PatientMedication, Visit
 from app.db.session import SessionLocal
 from app.domain.concerns import ANALYSIS_VERSION, CONCERN_LIST
 from app.domain.severity import map_score_to_severity
@@ -108,6 +108,49 @@ DEMO_VISITS_SPEC: tuple[dict[str, Any], ...] = (
     },
 )
 
+DEMO_MEDICATIONS_SPEC: tuple[dict[str, Any], ...] = (
+    {
+        "name": "Adapalene 0.1% Gel",
+        "category": "topical_retinoid",
+        "dose": "Pea-sized amount nightly to dry skin",
+        "rxnorm_code": "1362243",
+        "start_date": date(2026, 7, 15),
+        "end_date": None,
+        "prescriber": DEFAULT_CLINICIAN_NAME,
+        "notes": "Targeting inflammatory comedones and texture roughness.",
+    },
+    {
+        "name": "Ceramide Barrier Cream",
+        "category": "barrier_repair",
+        "dose": "Twice daily after cleansing",
+        "rxnorm_code": None,
+        "start_date": date(2026, 7, 15),
+        "end_date": None,
+        "prescriber": DEFAULT_CLINICIAN_NAME,
+        "notes": "Barrier support during retinoid acclimatization.",
+    },
+    {
+        "name": "Niacinamide 5% Serum",
+        "category": "barrier_repair",
+        "dose": "3-4 drops morning under SPF",
+        "rxnorm_code": None,
+        "start_date": date(2026, 8, 29),
+        "end_date": None,
+        "prescriber": DEFAULT_CLINICIAN_NAME,
+        "notes": "Anti-inflammatory support for post-inflammatory erythema.",
+    },
+    {
+        "name": "Glycolic Acid 10% Exfoliating Toner",
+        "category": "topical_acid",
+        "dose": "3 nights per week alternating with retinoid",
+        "rxnorm_code": None,
+        "start_date": date(2026, 9, 29),
+        "end_date": None,
+        "prescriber": DEFAULT_CLINICIAN_NAME,
+        "notes": "Added OTC without strict SPF reapplication outdoors; correlated with subsequent dark spot rebound.",
+    },
+)
+
 
 def _build_seed_raw_result(
     task_id: str,
@@ -199,7 +242,7 @@ def seed_baseline(db: Session) -> dict[str, str]:
 
 
 def seed_demo_longitudinal(db: Session) -> dict[str, Any]:
-    """Seed the 3-visit longitudinal demo patient (~90 days) idempotently."""
+    """Seed the 3-visit longitudinal demo patient (~90 days) and medications idempotently."""
     base_info = seed_baseline(db)
     clinic = db.execute(
         select(Clinic).where(Clinic.name == DEFAULT_CLINIC_NAME)
@@ -278,6 +321,29 @@ def seed_demo_longitudinal(db: Session) -> dict[str, Any]:
                 )
 
         visit_ids.append(str(visit.id))
+
+    # Seed demo patient medications idempotently
+    for med_spec in DEMO_MEDICATIONS_SPEC:
+        existing_med = db.execute(
+            select(PatientMedication).where(
+                PatientMedication.patient_id == demo_patient.id,
+                PatientMedication.name == med_spec["name"],
+            )
+        ).scalar_one_or_none()
+        if existing_med is None:
+            db.add(
+                PatientMedication(
+                    patient_id=demo_patient.id,
+                    name=med_spec["name"],
+                    category=med_spec["category"],
+                    dose=med_spec["dose"],
+                    rxnorm_code=med_spec["rxnorm_code"],
+                    start_date=med_spec["start_date"],
+                    end_date=med_spec["end_date"],
+                    prescriber=med_spec["prescriber"],
+                    notes=med_spec["notes"],
+                )
+            )
 
     db.commit()
     regenerate_patient_flags(db, demo_patient.id)

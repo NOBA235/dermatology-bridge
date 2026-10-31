@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
@@ -9,8 +9,14 @@ import {
   CaptureTokenResponse,
   CLINICAL_DISCLAIMER,
   ConcernTrend,
+  createPatientMedication,
+  deletePatientMedication,
   getStoredToken,
+  MedicationCorrelation,
   PatientFlagsResponse,
+  PatientMedication,
+  PatientMedicationCorrelationsResponse,
+  PatientMedicationsResponse,
   PatientRecord,
   PatientTrendsResponse,
   PRIVACY_NOTICE,
@@ -36,6 +42,44 @@ const VERDICT_BADGE_CLASSES: Record<string, string> = {
   stalled: "bg-slate-100 text-slate-700 border-slate-300",
   worsening: "bg-rose-100 text-rose-800 border-rose-300",
   insufficient_data: "bg-slate-50 text-slate-500 border-slate-200",
+};
+
+const MED_RESPONSE_BADGES: Record<
+  string,
+  { label: string; className: string }
+> = {
+  clinically_responsive: {
+    label: "Clinically Responsive",
+    className: "bg-emerald-100 text-emerald-900 border-emerald-300",
+  },
+  early_favorable_trend: {
+    label: "Early Response Detected",
+    className: "bg-sky-100 text-sky-900 border-sky-300",
+  },
+  minimal_change: {
+    label: "Minimal Change (|Δ| < MDC)",
+    className: "bg-slate-100 text-slate-700 border-slate-300",
+  },
+  potential_adverse_flare: {
+    label: "Watch: Potential Barrier Disruption",
+    className: "bg-rose-100 text-rose-900 border-rose-300",
+  },
+  insufficient_followup: {
+    label: "Within Onset Window",
+    className: "bg-zinc-100 text-zinc-700 border-zinc-300",
+  },
+};
+
+const MED_CATEGORY_COLORS: Record<string, string> = {
+  topical_retinoid: "bg-purple-100 text-purple-900 border-purple-200",
+  oral_retinoid: "bg-violet-100 text-violet-900 border-violet-200",
+  barrier_repair: "bg-teal-100 text-teal-900 border-teal-200",
+  topical_acid: "bg-amber-100 text-amber-900 border-amber-200",
+  anti_androgen: "bg-pink-100 text-pink-900 border-pink-200",
+  oral_antibiotic: "bg-indigo-100 text-indigo-900 border-indigo-200",
+  topical_antimicrobial: "bg-cyan-100 text-cyan-900 border-cyan-200",
+  corticosteroid: "bg-orange-100 text-orange-900 border-orange-200",
+  other: "bg-slate-100 text-slate-900 border-slate-200",
 };
 
 function SparklineSvg({
@@ -114,14 +158,28 @@ export default function PatientDetailPage() {
   const [visits, setVisits] = useState<VisitRecord[]>([]);
   const [trends, setTrends] = useState<PatientTrendsResponse | null>(null);
   const [flagsData, setFlagsData] = useState<PatientFlagsResponse | null>(null);
+  const [medications, setMedications] = useState<PatientMedication[]>([]);
+  const [correlations, setCorrelations] = useState<MedicationCorrelation[]>([]);
   const [captureLink, setCaptureLink] = useState<CaptureTokenResponse | null>(
     null
   );
+
   const [loading, setLoading] = useState(true);
   const [regenerating, setRegenerating] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copiedNotice, setCopiedNotice] = useState(false);
+
+  // New Prescription modal state
+  const addMedDialogRef = useRef<HTMLDialogElement>(null);
+  const [medFormName, setMedFormName] = useState("");
+  const [medFormCategory, setMedFormCategory] = useState("topical_retinoid");
+  const [medFormDose, setMedFormDose] = useState("");
+  const [medFormStartDate, setMedFormStartDate] = useState(
+    new Date().toISOString().split("T")[0]
+  );
+  const [medFormNotes, setMedFormNotes] = useState("");
+  const [savingMed, setSavingMed] = useState(false);
 
   const fetchAllData = useCallback(
     async (silent = false) => {
@@ -131,16 +189,25 @@ export default function PatientDetailPage() {
       }
       if (!silent) setLoading(true);
       try {
-        const [ptRes, visRes, trRes, flRes] = await Promise.all([
-          apiFetch<PatientRecord>(`/api/patients/${patientId}`),
-          apiFetch<PatientVisitsPayload>(`/api/patients/${patientId}/visits`),
-          apiFetch<PatientTrendsResponse>(`/api/patients/${patientId}/trends`),
-          apiFetch<PatientFlagsResponse>(`/api/patients/${patientId}/flags`),
-        ]);
+        const [ptRes, visRes, trRes, flRes, medRes, corrRes] =
+          await Promise.all([
+            apiFetch<PatientRecord>(`/api/patients/${patientId}`),
+            apiFetch<PatientVisitsPayload>(`/api/patients/${patientId}/visits`),
+            apiFetch<PatientTrendsResponse>(`/api/patients/${patientId}/trends`),
+            apiFetch<PatientFlagsResponse>(`/api/patients/${patientId}/flags`),
+            apiFetch<PatientMedicationsResponse>(
+              `/api/patients/${patientId}/medications`
+            ),
+            apiFetch<PatientMedicationCorrelationsResponse>(
+              `/api/patients/${patientId}/medication-correlations`
+            ),
+          ]);
         setPatient(ptRes);
         setVisits(visRes.visits);
         setTrends(trRes);
         setFlagsData(flRes);
+        setMedications(medRes.medications);
+        setCorrelations(corrRes.correlations);
         setError(null);
       } catch (err) {
         if (!silent) {
@@ -157,7 +224,6 @@ export default function PatientDetailPage() {
     [patientId, router]
   );
 
-  // Initial load + automatic background polling every 4 seconds (no manual page refresh needed)
   useEffect(() => {
     void fetchAllData(false);
     const intervalId = window.setInterval(() => {
@@ -246,6 +312,46 @@ export default function PatientDetailPage() {
     }
   }
 
+  async function handleAddMedicationSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!medFormName.trim()) return;
+    setSavingMed(true);
+    try {
+      await createPatientMedication(patientId, {
+        name: medFormName.trim(),
+        category: medFormCategory,
+        dose: medFormDose.trim() || undefined,
+        start_date: medFormStartDate,
+        notes: medFormNotes.trim() || undefined,
+      });
+      addMedDialogRef.current?.close();
+      setMedFormName("");
+      setMedFormDose("");
+      setMedFormNotes("");
+      await fetchAllData(true);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to record medication."
+      );
+    } finally {
+      setSavingMed(false);
+    }
+  }
+
+  async function handleDeleteMedication(medId: string) {
+    if (!window.confirm("Remove this medication record from the patient chart?")) {
+      return;
+    }
+    try {
+      await deletePatientMedication(patientId, medId);
+      await fetchAllData(true);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to delete medication."
+      );
+    }
+  }
+
   const concernsByKey: Record<string, ConcernTrend> = {};
   for (const c of trends?.concerns || []) {
     concernsByKey[c.concern] = c;
@@ -257,6 +363,7 @@ export default function PatientDetailPage() {
 
   return (
     <main className="max-w-7xl w-full mx-auto px-4 sm:px-6 py-8 space-y-8">
+      {/* Header bar */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-5">
         <div>
           <Link
@@ -279,6 +386,14 @@ export default function PatientDetailPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => addMedDialogRef.current?.showModal()}
+            className="rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-900 text-xs font-semibold px-3.5 py-2.5 transition"
+          >
+            + Add Prescription / Regimen
+          </button>
+
           <button
             type="button"
             onClick={handleGenerateCaptureLink}
@@ -309,12 +424,12 @@ export default function PatientDetailPage() {
         </div>
       </div>
 
-      {/* Report disclaimer callout */}
+      {/* Clinical notice */}
       <div className="rounded-xl bg-sky-50 border border-sky-200 px-4 py-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-800">
         <span>
           <strong>Clinical Decision-Support Notice:</strong>{" "}
-          {CLINICAL_DISCLAIMER} All longitudinal flags and attribution
-          hypotheses are non-diagnostic observations.
+          {CLINICAL_DISCLAIMER} All longitudinal flags, medication attributions,
+          and hypotheses are non-diagnostic decision-support observations.
         </span>
         <span className="text-slate-600">
           Live auto-refresh active (polls every 4s)
@@ -375,11 +490,11 @@ export default function PatientDetailPage() {
 
       {loading ? (
         <div className="py-12 text-center text-sm text-slate-500">
-          Loading longitudinal trajectories and concern scores...
+          Loading longitudinal trajectories, medications, and concern scores...
         </div>
       ) : (
         <>
-          {/* Top-3 Prioritized Concerns + Grounded Summary */}
+          {/* Top-3 Prioritized Concerns */}
           <section className="space-y-4">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h2 className="text-lg font-bold text-slate-900">
@@ -392,7 +507,7 @@ export default function PatientDetailPage() {
             </div>
 
             {flagsData?.summary && (
-              <div className="rounded-xl bg-white border border-slate-200 border-l-4 border-l-slate-900 p-4 shadow-sm text-sm text-slate-800">
+              <div className="rounded-xl bg-white border border-slate-200 border-l-4 border-l-slate-900 p-4 shadow-sm text-sm text-slate-800 leading-relaxed">
                 {flagsData.summary}
               </div>
             )}
@@ -448,41 +563,178 @@ export default function PatientDetailPage() {
                         </strong>
                       </div>
                     </div>
-                    <SparklineSvg points={item.points} verdict={item.verdict} />
+                    <div>
+                      <SparklineSvg points={item.points} verdict={item.verdict} />
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
           </section>
 
-          {/* 12-Concern Snapshot Grid */}
-          <section className="space-y-3">
+          {/* PRESCRIPTION CROSS-REFERENCING & ATTRIBUTION ANALYSIS */}
+          <section className="space-y-4">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">
+                  Prescription Cross-Referencing &amp; Treatment Response Trajectories
+                </h2>
+                <p className="text-xs text-slate-600 mt-0.5">
+                  Automated correlation of medication start/stop dates against
+                  YouCam skin concern inflection points.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => addMedDialogRef.current?.showModal()}
+                className="text-xs font-semibold text-sky-700 hover:text-sky-800"
+              >
+                + Record Prescription
+              </button>
+            </div>
+
+            {correlations.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500 bg-white">
+                No active or past medications recorded for this patient. Click{" "}
+                <strong>&ldquo;+ Add Prescription / Regimen&rdquo;</strong> to cross-reference
+                therapies with skin analysis trends.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {correlations.map((c) => {
+                  const statusBadge =
+                    MED_RESPONSE_BADGES[c.response_status] || {
+                      label: c.response_status,
+                      className: "bg-slate-100 text-slate-700 border-slate-300",
+                    };
+                  const catColor =
+                    MED_CATEGORY_COLORS[c.category] ||
+                    "bg-slate-100 text-slate-800 border-slate-200";
+
+                  return (
+                    <div
+                      key={c.medication_id}
+                      className="rounded-xl bg-white border border-slate-200 p-4 shadow-sm space-y-3"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-100 pb-3">
+                        <div className="space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="text-base font-bold text-slate-900">
+                              {c.medication_name}
+                            </h3>
+                            <span
+                              className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${catColor}`}
+                            >
+                              {c.category_label}
+                            </span>
+                            <span
+                              className={`rounded border px-2 py-0.5 text-xs font-bold ${statusBadge.className}`}
+                            >
+                              {statusBadge.label}
+                            </span>
+                          </div>
+                          <div className="text-xs text-slate-600 flex flex-wrap items-center gap-2">
+                            <span>
+                              <strong>Dosage:</strong> {c.dose || "Standard dose"}
+                            </span>
+                            &bull;
+                            <span>
+                              <strong>Started:</strong> {c.start_date} (
+                              {c.days_on_therapy} days on therapy)
+                            </span>
+                            {c.end_date && (
+                              <>
+                                &bull;
+                                <span>
+                                  <strong>Ended:</strong> {c.end_date}
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteMedication(c.medication_id)}
+                          className="text-xs text-rose-600 hover:text-rose-800 font-semibold px-2 py-1"
+                        >
+                          Remove
+                        </button>
+                      </div>
+
+                      {/* Clinical attribution headline */}
+                      <div className="rounded-lg bg-slate-50 p-3 border border-slate-100 text-xs space-y-1 text-slate-800">
+                        <p className="font-semibold text-slate-900">
+                          {c.headline}
+                        </p>
+                        <p className="text-slate-600">{c.clinical_note}</p>
+                      </div>
+
+                      {/* Concern movements breakdown */}
+                      {c.concern_responses.length > 0 && (
+                        <div className="pt-1">
+                          <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                            Correlated Metric Trajectories (Baseline vs Latest Follow-up)
+                          </h4>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
+                            {c.concern_responses.map((cr) => (
+                              <div
+                                key={cr.concern}
+                                className="rounded-lg border border-slate-200 bg-white p-2.5 text-xs space-y-1"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <span className="font-bold text-slate-900">
+                                    {cr.label}
+                                  </span>
+                                  <span
+                                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                      cr.is_improved
+                                        ? "bg-emerald-100 text-emerald-800"
+                                        : cr.is_worsened
+                                        ? "bg-rose-100 text-rose-800"
+                                        : "bg-slate-100 text-slate-600"
+                                    }`}
+                                  >
+                                    &Delta; {cr.delta}
+                                  </span>
+                                </div>
+                                <div className="text-[11px] text-slate-500">
+                                  {cr.baseline_score} &rarr; {cr.latest_score} (MDC{" "}
+                                  {cr.mdc})
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          {/* 12-Concern Snapshot Matrix */}
+          <section className="space-y-4">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h2 className="text-lg font-bold text-slate-900">
-                12-Concern Longitudinal Snapshot Grid
+                12-Concern Longitudinal Snapshot Matrix
               </h2>
               <span className="text-xs text-slate-600">
-                Observation window: {trends?.baseline_date || "N/A"} &rarr;{" "}
-                {trends?.latest_date || "N/A"} ({trends?.days_between ?? 0}{" "}
-                days, {trends?.visit_count ?? 0} visits)
+                {visits.length} scans recorded &bull; {CLINICAL_DISCLAIMER}
               </span>
             </div>
 
             <div
               tabIndex={0}
-              role="region"
-              aria-labelledby="concern-snapshot-caption"
-              className="table-wrapper bg-white border border-slate-200 rounded-xl shadow-sm"
+              aria-label="12-concern longitudinal scores and trends"
+              className="@container overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
             >
-              <table className="responsive-data-table text-left text-xs sm:text-sm">
-                <caption id="concern-snapshot-caption" className="sr-only">
-                  All 12 frozen skin concerns with baseline score, latest score,
-                  delta, severity bucket, verdict, and attribution hypothesis
-                </caption>
-                <thead className="bg-slate-100 text-xs uppercase text-slate-600">
-                  <tr>
+              <table className="w-full text-left text-xs text-slate-800 border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 text-slate-700 uppercase font-semibold text-[11px] tracking-wider">
                     <th className="py-3 px-3.5 border-b border-slate-200">
-                      Concern
+                      Skin Metric
                     </th>
                     <th className="py-3 px-3.5 border-b border-slate-200">
                       Direction
@@ -509,7 +761,8 @@ export default function PatientDetailPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-200">
                   {(trends?.concerns || []).map((c) => {
-                    const sev = c.latest_severity || c.baseline_severity || "mild";
+                    const sev =
+                      c.latest_severity || c.baseline_severity || "mild";
                     return (
                       <tr key={c.concern} className="hover:bg-slate-50">
                         <th className="py-3 px-3.5 font-semibold text-slate-900">
@@ -638,7 +891,120 @@ export default function PatientDetailPage() {
           </section>
         </>
       )}
+
+      {/* Add Medication Dialog Modal */}
+      <dialog
+        ref={addMedDialogRef}
+        className="rounded-2xl border border-slate-300 bg-white p-6 shadow-2xl max-w-lg w-full backdrop:bg-slate-900/50"
+      >
+        <form onSubmit={handleAddMedicationSubmit} className="space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+            <h3 className="text-base font-bold text-slate-900">
+              Record New Prescription / Active Regimen
+            </h3>
+            <button
+              type="button"
+              onClick={() => addMedDialogRef.current?.close()}
+              className="text-slate-400 hover:text-slate-600 text-lg font-bold"
+            >
+              &times;
+            </button>
+          </div>
+
+          <div className="space-y-3 text-xs">
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">
+                Medication / Product Name *
+              </label>
+              <input
+                type="text"
+                required
+                value={medFormName}
+                onChange={(e) => setMedFormName(e.target.value)}
+                placeholder="e.g. Adapalene 0.1% Gel, Spironolactone"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-500"
+              />
+            </div>
+
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">
+                Therapeutic Category *
+              </label>
+              <select
+                value={medFormCategory}
+                onChange={(e) => setMedFormCategory(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-500"
+              >
+                <option value="topical_retinoid">Topical Retinoid</option>
+                <option value="oral_retinoid">Oral Retinoid (Isotretinoin)</option>
+                <option value="barrier_repair">Barrier Repair / Ceramide Cream</option>
+                <option value="topical_acid">Exfoliating Acid (AHA / BHA / Azelaic)</option>
+                <option value="anti_androgen">Anti-Androgen (Spironolactone)</option>
+                <option value="oral_antibiotic">Oral Antibiotic (Doxycycline)</option>
+                <option value="topical_antimicrobial">Topical Antimicrobial (Benzoyl Peroxide)</option>
+                <option value="corticosteroid">Topical Corticosteroid</option>
+                <option value="other">Other Regimen Product</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">
+                Dosage &amp; Frequency
+              </label>
+              <input
+                type="text"
+                value={medFormDose}
+                onChange={(e) => setMedFormDose(e.target.value)}
+                placeholder="e.g. Pea-sized amount nightly to dry skin"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-500"
+              />
+            </div>
+
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">
+                Start Date *
+              </label>
+              <input
+                type="date"
+                required
+                value={medFormStartDate}
+                onChange={(e) => setMedFormStartDate(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-500"
+              />
+            </div>
+
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">
+                Clinical Instructions / Notes
+              </label>
+              <textarea
+                value={medFormNotes}
+                onChange={(e) => setMedFormNotes(e.target.value)}
+                rows={2}
+                placeholder="e.g. Titrated from every other night to nightly."
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-500"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
+            <button
+              type="button"
+              onClick={() => addMedDialogRef.current?.close()}
+              className="px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-lg"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={savingMed}
+              className="px-4 py-2 text-xs font-semibold text-white bg-sky-700 hover:bg-sky-800 disabled:opacity-60 rounded-lg transition"
+            >
+              {savingMed ? "Saving..." : "Save & Correlate"}
+            </button>
+          </div>
+        </form>
+      </dialog>
     </main>
   );
 }
-

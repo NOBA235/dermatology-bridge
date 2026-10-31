@@ -1,6 +1,6 @@
+"""Patient longitudinal visit listing, trend, medication, and correlation endpoints."""
 
-"""Patient longitudinal visit listing and trend endpoints (GET /api/patients/{id}/visits, /trends)."""
-
+from datetime import date
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
@@ -10,10 +10,16 @@ from sqlalchemy.orm import Session, selectinload
 from app import CLINICAL_DISCLAIMER
 from app.api.schemas import (
     CaptureTokenOut,
+    ConcernResponseSummaryOut,
     ConcernTrendOut,
+    MedicationCorrelationOut,
     PatientCreateRequest,
     PatientFlagsResponse,
     PatientListResponse,
+    PatientMedicationCreate,
+    PatientMedicationCorrelationsResponse,
+    PatientMedicationListResponse,
+    PatientMedicationOut,
     PatientOut,
     PatientTrendsResponse,
     PatientVisitsResponse,
@@ -23,10 +29,11 @@ from app.api.schemas import (
 )
 from app.auth.jwt import CAPTURE_TOKEN_DEFAULT_TTL_MINUTES, create_capture_token
 from app.auth.middleware import get_current_clinician
-from app.db.models import Clinician, ConcernScore, Patient, Visit
+from app.db.models import Clinician, ConcernScore, Patient, PatientMedication, Visit
 from app.db.session import get_db
 from app.domain.concerns import CONCERN_DIRECTION, CONCERN_LABELS, CONCERN_LIST
 from app.domain.flags import MDC_TABLE, compute_delta_and_pct, compute_verdict
+from app.domain.medications import cross_reference_medication
 from app.domain.severity import map_score_to_severity
 from app.services.agent import regenerate_patient_flags
 from app.services.report import (
@@ -421,4 +428,193 @@ def get_patient_fhir_export(
     return build_patient_fhir_bundle(db, patient.id)
 
 
+@router.get("/{patient_id}/medications", response_model=PatientMedicationListResponse)
+def get_patient_medications(
+    patient_id: uuid.UUID,
+    clinician: Clinician = Depends(get_current_clinician),
+    db: Session = Depends(get_db),
+) -> PatientMedicationListResponse:
+    """Return all prescribed medications and active topicals for a patient."""
+    patient = _get_authorized_patient(db, patient_id, clinician)
+    stmt = (
+        select(PatientMedication)
+        .where(PatientMedication.patient_id == patient.id)
+        .order_by(PatientMedication.start_date.desc(), PatientMedication.created_at.desc())
+    )
+    meds = list(db.execute(stmt).scalars().all())
+    today = date.today()
+    out_list: list[PatientMedicationOut] = []
+    for m in meds:
+        m_out = PatientMedicationOut.model_validate(m)
+        m_out.is_active = m.end_date is None or m.end_date >= today
+        out_list.append(m_out)
 
+    return PatientMedicationListResponse(
+        patient_id=patient.id,
+        medications=out_list,
+        total=len(out_list),
+        disclaimer=CLINICAL_DISCLAIMER,
+    )
+
+
+@router.post(
+    "/{patient_id}/medications",
+    response_model=PatientMedicationOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def add_patient_medication(
+    patient_id: uuid.UUID,
+    payload: PatientMedicationCreate,
+    clinician: Clinician = Depends(get_current_clinician),
+    db: Session = Depends(get_db),
+) -> PatientMedicationOut:
+    """Record a new prescribed medication, topical, or active skincare regimen item."""
+    patient = _get_authorized_patient(db, patient_id, clinician)
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Medication name cannot be blank.",
+        )
+
+    med = PatientMedication(
+        patient_id=patient.id,
+        name=name,
+        category=payload.category.strip() if payload.category else "other",
+        dose=payload.dose.strip() if payload.dose else None,
+        rxnorm_code=payload.rxnorm_code.strip() if payload.rxnorm_code else None,
+        start_date=payload.start_date,
+        end_date=payload.end_date,
+        prescriber=payload.prescriber.strip() if payload.prescriber else clinician.full_name,
+        notes=payload.notes.strip() if payload.notes else None,
+    )
+    db.add(med)
+    db.commit()
+    db.refresh(med)
+
+    med_out = PatientMedicationOut.model_validate(med)
+    med_out.is_active = med.end_date is None or med.end_date >= date.today()
+    return med_out
+
+
+@router.delete(
+    "/{patient_id}/medications/{medication_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_patient_medication(
+    patient_id: uuid.UUID,
+    medication_id: uuid.UUID,
+    clinician: Clinician = Depends(get_current_clinician),
+    db: Session = Depends(get_db),
+) -> None:
+    """Delete a medication record from the patient chart."""
+    patient = _get_authorized_patient(db, patient_id, clinician)
+    med = db.get(PatientMedication, medication_id)
+    if med is None or med.patient_id != patient.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Medication record not found.",
+        )
+    db.delete(med)
+    db.commit()
+
+
+@router.get(
+    "/{patient_id}/medication-correlations",
+    response_model=PatientMedicationCorrelationsResponse,
+)
+def get_patient_medication_correlations(
+    patient_id: uuid.UUID,
+    clinician: Clinician = Depends(get_current_clinician),
+    db: Session = Depends(get_db),
+) -> PatientMedicationCorrelationsResponse:
+    """Cross-reference patient medications with longitudinal skin concern trajectories."""
+    patient = _get_authorized_patient(db, patient_id, clinician)
+
+    # 1. Fetch all medications sorted by start_date asc
+    med_stmt = (
+        select(PatientMedication)
+        .where(PatientMedication.patient_id == patient.id)
+        .order_by(PatientMedication.start_date.asc())
+    )
+    medications = list(db.execute(med_stmt).scalars().all())
+
+    # 2. Fetch all successful visits with concern scores sorted by visit_date asc
+    visit_stmt = (
+        select(Visit)
+        .where(Visit.patient_id == patient.id, Visit.youcam_status == "success")
+        .options(selectinload(Visit.concern_scores))
+        .order_by(Visit.visit_date.asc(), Visit.created_at.asc())
+    )
+    visits_db = list(db.execute(visit_stmt).scalars().all())
+
+    visits_payload = []
+    for v in visits_db:
+        scores_dict = {cs.concern: cs.score for cs in v.concern_scores}
+        visits_payload.append({
+            "visit_date": v.visit_date,
+            "scores": scores_dict,
+        })
+
+    correlations: list[MedicationCorrelationOut] = []
+    active_count = 0
+    today = date.today()
+
+    for med in medications:
+        if med.end_date is None or med.end_date >= today:
+            active_count += 1
+
+        corr_res = cross_reference_medication(
+            medication_id=str(med.id),
+            medication_name=med.name,
+            category=med.category,
+            dose=med.dose,
+            start_date=med.start_date,
+            end_date=med.end_date,
+            visits=visits_payload,
+        )
+
+        responses_out = [
+            ConcernResponseSummaryOut(
+                concern=r.concern,
+                label=r.label,
+                baseline_score=r.baseline_score,
+                latest_score=r.latest_score,
+                delta=r.delta,
+                pct_change=r.pct_change,
+                mdc=r.mdc,
+                direction=r.direction,
+                is_improved=r.is_improved,
+                is_worsened=r.is_worsened,
+                exceeds_mdc=r.exceeds_mdc,
+            )
+            for r in corr_res.concern_responses
+        ]
+
+        correlations.append(
+            MedicationCorrelationOut(
+                medication_id=corr_res.medication_id,
+                medication_name=corr_res.medication_name,
+                category=corr_res.category,
+                category_label=corr_res.category_label,
+                dose=corr_res.dose,
+                start_date=corr_res.start_date,
+                end_date=corr_res.end_date,
+                is_active=corr_res.is_active,
+                days_on_therapy=corr_res.days_on_therapy,
+                baseline_visit_date=corr_res.baseline_visit_date,
+                latest_visit_date=corr_res.latest_visit_date,
+                response_status=corr_res.response_status,
+                headline=corr_res.headline,
+                clinical_note=corr_res.clinical_note,
+                concern_responses=responses_out,
+            )
+        )
+
+    return PatientMedicationCorrelationsResponse(
+        patient_id=patient.id,
+        visit_count=len(visits_db),
+        active_medications_count=active_count,
+        correlations=correlations,
+        disclaimer=CLINICAL_DISCLAIMER,
+    )

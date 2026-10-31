@@ -186,3 +186,91 @@ class CaptureSessionOut(BaseModel):
     consent_version: str
     privacy_notice: str = "Photos are stored privately and deletable on request."
     disclaimer: str = CLINICAL_DISCLAIMER
+
+
+class PatientMedicationCreate(BaseModel):
+    """Schema for adding a medication to a patient chart."""
+
+    name: str
+    category: str
+    dose: str | None = None
+    rxnorm_code: str | None = None
+    start_date: date
+    end_date: date | None = None
+    prescriber: str | None = None
+    notes: str | None = None
+
+
+class PatientMedicationOut(BaseModel):
+    """Schema for a persisted patient medication."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    patient_id: uuid.UUID
+    name: str
+    category: str
+    dose: str | None = None
+    rxnorm_code: str | None = None
+    start_date: date
+    end_date: date | None = None
+    prescriber: str | None = None
+    notes: str | None = None
+    created_at: datetime
+    is_active: bool = True
+    disclaimer: str = CLINICAL_DISCLAIMER
+
+
+class PatientMedicationListResponse(BaseModel):
+    """Response for GET /api/patients/{id}/medications."""
+
+    patient_id: uuid.UUID
+    medications: list[PatientMedicationOut]
+    total: int
+    disclaimer: str = CLINICAL_DISCLAIMER
+
+
+class ConcernResponseSummaryOut(BaseModel):
+    """Per-concern metric delta relative to a medication."""
+
+    concern: str
+    label: str
+    baseline_score: Decimal
+    latest_score: Decimal
+    delta: Decimal
+    pct_change: Decimal | None = None
+    mdc: float
+    direction: str
+    is_improved: bool
+    is_worsened: bool
+    exceeds_mdc: bool
+
+
+class MedicationCorrelationOut(BaseModel):
+    """Cross-referenced longitudinal trajectory for a single medication."""
+
+    medication_id: str
+    medication_name: str
+    category: str
+    category_label: str
+    dose: str | None = None
+    start_date: date
+    end_date: date | None = None
+    is_active: bool
+    days_on_therapy: int
+    baseline_visit_date: date | None = None
+    latest_visit_date: date | None = None
+    response_status: str
+    headline: str
+    clinical_note: str
+    concern_responses: list[ConcernResponseSummaryOut]
+
+
+class PatientMedicationCorrelationsResponse(BaseModel):
+    """Response for GET /api/patients/{id}/medication-correlations."""
+
+    patient_id: uuid.UUID
+    visit_count: int
+    active_medications_count: int
+    correlations: list[MedicationCorrelationOut]
+    disclaimer: str = CLINICAL_DISCLAIMER

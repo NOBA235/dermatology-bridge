@@ -8,7 +8,7 @@ from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import (
-     JSON,
+    JSON,
     BigInteger,
     CheckConstraint,
     Date,
@@ -130,6 +130,11 @@ class Patient(Base):
     )
     treatment_flags: Mapped[list[TreatmentFlag]] = relationship(
         back_populates="patient", cascade="all, delete-orphan"
+    )
+    medications: Mapped[list[PatientMedication]] = relationship(
+        back_populates="patient",
+        cascade="all, delete-orphan",
+        order_by="PatientMedication.start_date.desc()",
     )
 
 
@@ -287,3 +292,40 @@ class TreatmentFlag(Base):
     baseline_visit: Mapped[Visit] = relationship(foreign_keys=[baseline_visit_id])
     latest_visit: Mapped[Visit] = relationship(foreign_keys=[latest_visit_id])
 
+
+class PatientMedication(Base):
+    """Patient medications and topical treatment regimens."""
+
+    __tablename__ = "patient_medications"
+    __table_args__ = (
+        Index("idx_patient_medications_patient", "patient_id"),
+        Index("idx_patient_medications_start", "patient_id", "start_date"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=text("gen_random_uuid()"),
+    )
+    patient_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("patients.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    category: Mapped[str] = mapped_column(Text, nullable=False)
+    dose: Mapped[str | None] = mapped_column(Text, nullable=True)
+    rxnorm_code: Mapped[str | None] = mapped_column(Text, nullable=True)
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    prescriber: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=_utc_now,
+        server_default=func.now(),
+    )
+
+    patient: Mapped[Patient] = relationship(back_populates="medications")

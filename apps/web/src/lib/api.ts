@@ -177,3 +177,125 @@ export async function apiFetch<T>(
   return (await response.json()) as T;
 }
 
+
+export interface PatientMedication {
+  id: string;
+  patient_id: string;
+  name: string;
+  category: string;
+  dose: string | null;
+  rxnorm_code: string | null;
+  start_date: string;
+  end_date: string | null;
+  prescriber: string | null;
+  notes: string | null;
+  created_at: string;
+  is_active: boolean;
+  disclaimer: string;
+}
+
+export interface PatientMedicationsResponse {
+  patient_id: string;
+  medications: PatientMedication[];
+  total: number;
+  disclaimer: string;
+}
+
+export interface ConcernResponseSummary {
+  concern: string;
+  label: string;
+  baseline_score: string;
+  latest_score: string;
+  delta: string;
+  pct_change: string | null;
+  mdc: number;
+  direction: "higher_is_better" | "lower_is_better";
+  is_improved: boolean;
+  is_worsened: boolean;
+  exceeds_mdc: boolean;
+}
+
+export interface MedicationCorrelation {
+  medication_id: string;
+  medication_name: string;
+  category: string;
+  category_label: string;
+  dose: string | null;
+  start_date: string;
+  end_date: string | null;
+  is_active: boolean;
+  days_on_therapy: number;
+  baseline_visit_date: string | null;
+  latest_visit_date: string | null;
+  response_status:
+    | "clinically_responsive"
+    | "early_favorable_trend"
+    | "minimal_change"
+    | "potential_adverse_flare"
+    | "insufficient_followup";
+  headline: string;
+  clinical_note: string;
+  concern_responses: ConcernResponseSummary[];
+}
+
+export interface PatientMedicationCorrelationsResponse {
+  patient_id: string;
+  visit_count: number;
+  active_medications_count: number;
+  correlations: MedicationCorrelation[];
+  disclaimer: string;
+}
+
+export async function fetchPatientMedications(
+  patientId: string
+): Promise<PatientMedicationsResponse> {
+  return apiFetch<PatientMedicationsResponse>(
+    `/api/patients/${patientId}/medications`
+  );
+}
+
+export async function createPatientMedication(
+  patientId: string,
+  payload: {
+    name: string;
+    category: string;
+    dose?: string;
+    rxnorm_code?: string;
+    start_date: string;
+    end_date?: string | null;
+    notes?: string;
+  }
+): Promise<PatientMedication> {
+  return apiFetch<PatientMedication>(`/api/patients/${patientId}/medications`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deletePatientMedication(
+  patientId: string,
+  medicationId: string
+): Promise<void> {
+  const token = getStoredToken();
+  const headers = new Headers();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const res = await fetch(
+    `${API_BASE_URL}/api/patients/${patientId}/medications/${medicationId}`,
+    {
+      method: "DELETE",
+      headers,
+    }
+  );
+  if (!res.ok) {
+    throw new Error(`Failed to delete medication (HTTP ${res.status})`);
+  }
+}
+
+export async function fetchMedicationCorrelations(
+  patientId: string
+): Promise<PatientMedicationCorrelationsResponse> {
+  return apiFetch<PatientMedicationCorrelationsResponse>(
+    `/api/patients/${patientId}/medication-correlations`
+  );
+}
