@@ -10,11 +10,20 @@ import pytest
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.api.visits import get_storage_service, get_youcam_service
-from app.config import API_ROOT
+from app.config import API_ROOT, get_settings
 from app.db.session import build_engine, get_db
 from app.main import create_app
 from app.services.storage import PrivateStorageService
 from app.services.youcam import MockYouCamClient, UnitBudgetLogger
+
+
+@pytest.fixture(autouse=True)
+def hermetic_test_env(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, None]:
+    """Ensure pytest always runs hermetically with ALLOW_LIVE_CALLS=false regardless of local .env."""
+    monkeypatch.setenv("ALLOW_LIVE_CALLS", "false")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
 
 
 @pytest.fixture()

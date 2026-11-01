@@ -8,49 +8,57 @@ const config: Config = {
   ],
   theme: {
     extend: {
-      colors: {
-        surface: {
-          canvas: "var(--surface-canvas)",
-          card: "var(--surface-card)",
-          subtle: "var(--surface-subtle)",
-          inset: "var(--surface-inset)",
-        },
-        ink: {
-          primary: "var(--ink-primary)",
-          secondary: "var(--ink-secondary)",
-          muted: "var(--ink-muted)",
-        },
-        clinical: {
-          accent: "var(--clinical-accent)",
-          hover: "var(--clinical-accent-hover)",
-          soft: "var(--clinical-accent-soft)",
-          border: "var(--clinical-accent-border)",
-        },
-      },
       fontFamily: {
         sans: [
-          "Inter",
+          "var(--font-sans)",
+          "Plus Jakarta Sans",
+          "system-ui",
           "-apple-system",
-          "BlinkMacSystemFont",
-          '"Segoe UI"',
-          "Roboto",
           "sans-serif",
         ],
         mono: [
-          '"JetBrains Mono"',
+          "var(--font-mono)",
+          "IBM Plex Mono",
           "ui-monospace",
           "SFMono-Regular",
-          "Menlo",
-          "Monaco",
-          "Consolas",
           "monospace",
         ],
       },
+      colors: {
+        dermnet: {
+          masthead: "#006599",
+          subnav: "#127eb8",
+          navy: "#0b2c44",
+          navyHover: "#071f31",
+          link: "#0072ab",
+          surface: "#f4f8fb",
+        },
+        surface: {
+          canvas: "#f4f8fb",
+          card: "#ffffff",
+          subtle: "#edf4f9",
+          border: "#cbdce9",
+        },
+        ink: {
+          primary: "#0f1e2e",
+          secondary: "#334e68",
+          muted: "#627d98",
+        },
+        clinical: {
+          accent: "#006599",
+          hover: "#004e78",
+          improving: "#1f6f52",
+          stalled: "#486581",
+          worsening: "#b83b2b",
+          hypothesis: "#006599",
+          correlation: "#8a5a14",
+        },
+      },
       boxShadow: {
         clinical:
-          "0 1px 2px 0 rgba(15, 23, 42, 0.04), 0 1px 3px 0 rgba(15, 23, 42, 0.06)",
+          "0 1px 3px 0 rgba(11, 44, 68, 0.06), 0 1px 2px -1px rgba(11, 44, 68, 0.04)",
         "clinical-md":
-          "0 4px 6px -1px rgba(15, 23, 42, 0.06), 0 2px 4px -2px rgba(15, 23, 42, 0.05)",
+          "0 6px 16px -3px rgba(11, 44, 68, 0.09), 0 2px 6px -2px rgba(11, 44, 68, 0.05)",
       },
     },
   },

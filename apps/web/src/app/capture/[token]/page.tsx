@@ -9,10 +9,6 @@ import {
   PRIVACY_NOTICE,
   VisitRecord,
 } from "@/lib/api";
-import {
-  CaptureFrameMetrics,
-  evaluateCaptureFrame,
-} from "@/lib/captureQuality";
 
 type CaptureStep = "consent" | "guided_selfie" | "success";
 type CameraStatus = "idle" | "requesting" | "active" | "denied" | "unavailable";
@@ -26,21 +22,15 @@ export default function PatientMobileCapturePage() {
     null
   );
   const [tokenError, setTokenError] = useState<string | null>(null);
+  const [verificationAttempt, setVerificationAttempt] = useState(0);
   const [step, setStep] = useState<CaptureStep>("consent");
 
   // Consent & encounter intake form
-  const [consentChecked, setConsentChecked] = useState(true);
+  const [consentChecked, setConsentChecked] = useState(false);
   const [chiefComplaint, setChiefComplaint] = useState("");
   const [routineText, setRoutineText] = useState("");
   const [treatmentChanges, setTreatmentChanges] = useState("");
 
-  // Client-side guided selfie quality gate state
-  const [frameMetrics, setFrameMetrics] = useState<CaptureFrameMetrics>({
-    faceCount: 1,
-    meanBrightness: 142,
-    faceAreaRatio: 0.34,
-    hasEyewearOcclusion: false,
-  });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -54,8 +44,6 @@ export default function PatientMobileCapturePage() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-  const qualityVerdict = evaluateCaptureFrame(frameMetrics);
 
   useEffect(() => {
     async function verifyToken() {
@@ -71,15 +59,19 @@ export default function PatientMobileCapturePage() {
         const data = (await res.json()) as CaptureSessionInfo;
         setSessionInfo(data);
       } catch (err) {
-        setTokenError(
-          err instanceof Error ? err.message : "Invalid capture link."
-        );
+          setTokenError(
+            err instanceof TypeError
+              ? "We could not connect to the clinic service to verify this link. Check your connection and try again."
+              : err instanceof Error
+              ? err.message
+              : "We could not verify this capture link. Please ask your care team for help."
+          );
       } finally {
         setVerifyingToken(false);
       }
     }
     void verifyToken();
-  }, [token]);
+  }, [token, verificationAttempt]);
 
   // Stop live camera stream on unmount or step change
   useEffect(() => {
@@ -109,7 +101,7 @@ export default function PatientMobileCapturePage() {
     ) {
       setCameraStatus("unavailable");
       setCameraMessage(
-        "Live camera preview is unavailable on this browser or connection. You can select a photo file or continue with the guided capture frame below."
+        "Live camera preview is unavailable on this browser or connection. You can choose a photo instead."
       );
       return;
     }
@@ -136,7 +128,7 @@ export default function PatientMobileCapturePage() {
       } else {
         setCameraStatus("unavailable");
         setCameraMessage(
-          "No front-facing camera was detected on this device. You can select a photo below or submit using the guided capture check."
+          "Camera preview could not start on this device. You can choose a photo instead."
         );
       }
     }
@@ -148,17 +140,15 @@ export default function PatientMobileCapturePage() {
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
-    setFrameMetrics({
-      faceCount: 1,
-      meanBrightness: 142,
-      faceAreaRatio: 0.34,
-      hasEyewearOcclusion: false,
-    });
   }
 
   async function handleSubmitScan() {
-    if (!qualityVerdict.passed) {
-      setSubmitError(qualityVerdict.message);
+    if (!consentChecked) {
+      setSubmitError("Please confirm consent before sending a photo.");
+      return;
+    }
+    if (!selectedFile && cameraStatus !== "active") {
+      setSubmitError("Choose a photo or enable the camera before submitting.");
       return;
     }
 
@@ -237,6 +227,17 @@ export default function PatientMobileCapturePage() {
             Capture Link Unavailable
           </h1>
           <p className="text-sm text-slate-700 leading-relaxed">{tokenError}</p>
+          <button
+            type="button"
+            onClick={() => {
+              setTokenError(null);
+              setVerifyingToken(true);
+              setVerificationAttempt((attempt) => attempt + 1);
+            }}
+            className="clinical-button clinical-button-secondary w-full"
+          >
+            Try link verification again
+          </button>
           <p className="text-xs text-slate-600 bg-slate-50 rounded-lg p-3 border border-slate-200">
             For your privacy, patient check-in links expire automatically after
             30 minutes. Please ask your dermatology care team to generate a new
@@ -250,6 +251,17 @@ export default function PatientMobileCapturePage() {
     );
   }
 
+  if (verifyingToken && !sessionInfo) {
+    return (
+      <main id="main-content" className="mx-auto w-full max-w-md px-4 py-10">
+        <div role="status" aria-live="polite" className="clinical-card p-6 text-center">
+          <p className="font-semibold text-ink-primary">Checking your secure check-in link</p>
+          <p className="mt-2 text-sm text-ink-muted">Please wait while we confirm this session.</p>
+        </div>
+      </main>
+    );
+  }
+
   const currentStepNumber =
     step === "consent" ? 1 : step === "guided_selfie" ? 2 : 3;
 
@@ -258,7 +270,7 @@ export default function PatientMobileCapturePage() {
       id="main-content"
       className="max-w-md w-full mx-auto px-4 py-5 sm:py-8 space-y-4"
     >
-      <div className="rounded-2xl bg-white border border-slate-200 p-5 shadow-clinical space-y-5">
+      <div className="clinical-card rounded-2xl p-5 sm:p-6 space-y-5">
         <header className="border-b border-slate-200 pb-4 space-y-2">
           <div className="flex items-center justify-between gap-2">
             <span className="inline-block rounded bg-sky-50 border border-sky-200 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-sky-900">
@@ -329,7 +341,7 @@ export default function PatientMobileCapturePage() {
         <div
           role="note"
           aria-label="Privacy and clinical notice"
-          className="rounded-xl bg-slate-50 border border-slate-200 p-3.5 text-xs text-slate-700 space-y-1"
+            className="rounded-xl border border-clinical bg-[#edf4f2] p-3.5 text-sm text-ink-secondary space-y-1"
         >
           <p className="font-semibold text-slate-900 flex items-center gap-1.5">
             <span aria-hidden="true" className="text-sky-700">
@@ -447,8 +459,8 @@ export default function PatientMobileCapturePage() {
               </ul>
             </div>
 
-            {/* Visual oval guide frame with live camera or guided check status */}
-            <div className="relative rounded-2xl bg-slate-900 text-white p-5 flex flex-col items-center justify-center min-h-[225px] border-2 border-slate-700 overflow-hidden">
+            {/* Camera preview is a framing aid; this page does not perform automated image-quality assessment. */}
+            <div className="relative rounded-2xl bg-[#193c38] text-white p-5 flex flex-col items-center justify-center min-h-[225px] border border-[#315a54] overflow-hidden">
               {cameraStatus === "active" && (
                 <video
                   ref={videoRef}
@@ -456,34 +468,12 @@ export default function PatientMobileCapturePage() {
                   playsInline
                   muted
                   aria-label="Live front-facing camera preview"
-                  className="absolute inset-0 w-full h-full object-cover opacity-65"
+                  className="absolute inset-0 w-full h-full object-cover"
                 />
               )}
-
-              <div
-                role="status"
-                aria-live="polite"
-                className={`relative z-10 w-36 h-44 rounded-full border-2 border-dashed flex flex-col items-center justify-center text-center p-3 text-xs transition ${
-                  qualityVerdict.passed
-                    ? "border-emerald-400 bg-emerald-950/45 text-emerald-100"
-                    : "border-rose-400 bg-rose-950/60 text-rose-100"
-                }`}
-              >
-                <span
-                  aria-hidden="true"
-                  className="text-base font-bold mb-1 block"
-                >
-                  {qualityVerdict.passed ? "✓" : "!"}
-                </span>
-                <span className="font-semibold">
-                  {qualityVerdict.passed
-                    ? "Face Centered & Lighting Ready"
-                    : "Adjust Framing or Lighting"}
-                </span>
-              </div>
-
-              <p className="relative z-10 mt-3 text-xs text-center font-medium px-2">
-                {qualityVerdict.message}
+              <div aria-hidden="true" className="relative z-10 h-40 w-32 rounded-[50%] border-2 border-dashed border-white/80" />
+              <p className="relative z-10 mt-3 max-w-xs text-center text-xs font-medium">
+                Keep your face centered and use even light. The guide helps with framing only; it does not verify photo quality.
               </p>
             </div>
 
@@ -491,8 +481,8 @@ export default function PatientMobileCapturePage() {
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
               <span className="text-slate-700 font-medium">
                 {cameraStatus === "active"
-                  ? "Live camera preview active"
-                  : "Optional: Use device front camera preview"}
+                  ? "Camera preview is on. A photo is sent only when you submit."
+                  : "Use the camera or choose a saved photo."}
               </span>
               {cameraStatus === "active" ? (
                 <button
@@ -527,120 +517,6 @@ export default function PatientMobileCapturePage() {
               </div>
             )}
 
-            {/* Real-time quality gate presets to test rejection rules cleanly */}
-            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 space-y-2">
-              <span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-700">
-                Guided Quality Check Simulator (Client-Side Gate)
-              </span>
-              <div className="flex flex-wrap gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSubmitError(null);
-                    setFrameMetrics({
-                      faceCount: 1,
-                      meanBrightness: 142,
-                      faceAreaRatio: 0.34,
-                      hasEyewearOcclusion: false,
-                    });
-                  }}
-                  className={`rounded-md border px-2.5 py-1.5 text-xs font-semibold transition ${
-                    qualityVerdict.passed
-                      ? "border-emerald-600 bg-emerald-50 text-emerald-950"
-                      : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-                  }`}
-                >
-                  ✓ Valid Front Face
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setFrameMetrics({
-                      faceCount: 0,
-                      meanBrightness: 130,
-                      faceAreaRatio: 0,
-                    })
-                  }
-                  className={`rounded-md border px-2.5 py-1.5 text-xs font-medium transition ${
-                    qualityVerdict.reason === "no_face"
-                      ? "border-rose-600 bg-rose-50 text-rose-950 font-semibold"
-                      : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-                  }`}
-                >
-                  Test: No Face
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setFrameMetrics({
-                      faceCount: 2,
-                      meanBrightness: 130,
-                      faceAreaRatio: 0.3,
-                    })
-                  }
-                  className={`rounded-md border px-2.5 py-1.5 text-xs font-medium transition ${
-                    qualityVerdict.reason === "multiple_faces"
-                      ? "border-rose-600 bg-rose-50 text-rose-950 font-semibold"
-                      : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-                  }`}
-                >
-                  Test: Multiple Faces
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setFrameMetrics({
-                      faceCount: 1,
-                      meanBrightness: 35,
-                      faceAreaRatio: 0.3,
-                    })
-                  }
-                  className={`rounded-md border px-2.5 py-1.5 text-xs font-medium transition ${
-                    qualityVerdict.reason === "too_dark"
-                      ? "border-rose-600 bg-rose-50 text-rose-950 font-semibold"
-                      : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-                  }`}
-                >
-                  Test: Too Dark
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setFrameMetrics({
-                      faceCount: 1,
-                      meanBrightness: 130,
-                      faceAreaRatio: 0.09,
-                    })
-                  }
-                  className={`rounded-md border px-2.5 py-1.5 text-xs font-medium transition ${
-                    qualityVerdict.reason === "face_too_small"
-                      ? "border-rose-600 bg-rose-50 text-rose-950 font-semibold"
-                      : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-                  }`}
-                >
-                  Test: Face Too Small
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setFrameMetrics({
-                      faceCount: 1,
-                      meanBrightness: 130,
-                      faceAreaRatio: 0.3,
-                      hasEyewearOcclusion: true,
-                    })
-                  }
-                  className={`rounded-md border px-2.5 py-1.5 text-xs font-medium transition ${
-                    qualityVerdict.reason === "eyewear_occlusion"
-                      ? "border-rose-600 bg-rose-50 text-rose-950 font-semibold"
-                      : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-                  }`}
-                >
-                  Test: Eyewear
-                </button>
-              </div>
-            </div>
-
             {/* File selection & Retake / Clear support */}
             <div className="rounded-xl border border-slate-200 p-3 space-y-2">
               <div className="flex items-center justify-between gap-2">
@@ -648,7 +524,7 @@ export default function PatientMobileCapturePage() {
                   htmlFor="selfie-file-input"
                   className="block text-xs font-semibold text-slate-800"
                 >
-                  Upload or Capture Selfie Photo (Optional)
+                  Choose a photo or take a selfie
                 </label>
                 {selectedFile && (
                   <button
@@ -656,7 +532,7 @@ export default function PatientMobileCapturePage() {
                     onClick={handleRetakeOrClearPhoto}
                     className="text-xs font-semibold text-rose-700 hover:text-rose-900 hover:underline"
                   >
-                    Retake / Clear Photo
+                    Choose a different photo
                   </button>
                 )}
               </div>
@@ -668,15 +544,16 @@ export default function PatientMobileCapturePage() {
                 capture="user"
                 onChange={(e) => {
                   const file = e.target.files?.[0] || null;
-                  setSelectedFile(file);
+                  setSelectedFile(
+                    file && file.type.startsWith("image/") ? file : null
+                  );
                   setSubmitError(null);
                 }}
                 className="w-full text-xs text-slate-700 file:mr-3 file:rounded-lg file:border file:border-slate-300 file:bg-slate-100 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-slate-800 hover:file:bg-slate-200"
               />
               {selectedFile && (
                 <p className="text-xs text-emerald-800 font-medium">
-                  Selected photo: <strong>{selectedFile.name}</strong> (
-                  {Math.max(1, Math.round(selectedFile.size / 1024))} KB)
+                  Photo ready on this device ({Math.max(1, Math.round(selectedFile.size / 1024))} KB). It is sent only after you submit.
                 </p>
               )}
             </div>
@@ -697,9 +574,9 @@ export default function PatientMobileCapturePage() {
                     onClick={handleRetakeOrClearPhoto}
                     className="rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-xs font-semibold text-rose-900 hover:bg-rose-100"
                   >
-                    Reset Framing Check
+                    Choose another photo
                   </button>
-                  {qualityVerdict.passed && (
+                  {(selectedFile || cameraStatus === "active") && (
                     <button
                       type="button"
                       onClick={() => void handleSubmitScan()}
@@ -726,7 +603,8 @@ export default function PatientMobileCapturePage() {
               </button>
               <button
                 type="button"
-                disabled={!qualityVerdict.passed || submitting}
+                disabled={(!selectedFile && cameraStatus !== "active") || submitting || !consentChecked}
+                aria-busy={submitting}
                 onClick={() => void handleSubmitScan()}
                 className="flex-1 rounded-xl bg-sky-700 hover:bg-sky-800 disabled:opacity-50 text-white font-semibold py-3 px-4 text-sm shadow-sm transition"
               >

@@ -21,17 +21,17 @@ export default function RootLayout({
         <div
           role="note"
           aria-label="Clinical disclaimer and privacy notice"
-          className="bg-slate-900 text-slate-100 text-xs py-2 px-4 border-b border-slate-800"
+          className="border-b border-clinical bg-[#e8f1ee] px-4 py-2 text-xs text-ink-secondary"
         >
           <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-x-6 gap-y-1">
-            <span className="inline-flex items-center gap-2 font-semibold tracking-wide text-sky-300">
+            <span className="inline-flex items-center gap-2 font-semibold text-ink-primary">
               <span
                 aria-hidden="true"
-                className="inline-block h-1.5 w-1.5 rounded-full bg-sky-400"
+                className="inline-block h-1.5 w-1.5 rounded-full bg-clinical-accent"
               />
               {CLINICAL_DISCLAIMER}
             </span>
-            <span className="text-slate-300">{PRIVACY_NOTICE}</span>
+            <span className="text-ink-muted">{PRIVACY_NOTICE}</span>
           </div>
         </div>
         <div className="flex-1 flex flex-col">{children}</div>

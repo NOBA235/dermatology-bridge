@@ -396,23 +396,36 @@ export default function PatientDetailPage() {
       <ClinicianWorkspaceHeader
         currentPatientName={patient?.full_name}
         currentPatientRef={patient?.external_ref}
+        rightActions={
+          <button
+            type="button"
+            onClick={() => {
+              setUploadVisitError(null);
+              uploadVisitDialogRef.current?.showModal();
+            }}
+            className="inline-flex items-center gap-2 rounded-full bg-[#0b2c44] hover:bg-[#071f31] text-white px-4 py-2 text-xs font-bold uppercase tracking-wider shadow-sm border border-white/15 transition"
+          >
+            <span>+ UPLOAD REAL PHOTO</span>
+            <span aria-hidden="true">&rarr;</span>
+          </button>
+        }
       />
 
       <main
         id="main-content"
-        className="max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-7"
+        className="chart-workspace max-w-7xl w-full mx-auto px-4 sm:px-6 py-7 sm:py-9 space-y-7"
       >
         {/* Patient Identity & Grouped Clinical Actions Header */}
         <section
           aria-label="Patient chart summary and actions"
-          className="bg-white border border-slate-200 rounded-xl p-5 shadow-clinical space-y-4"
+          className="clinical-card p-5 sm:p-6 space-y-5"
         >
           <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 pb-4">
             <div className="space-y-1">
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 <Link
                   href="/patients"
-                  className="font-semibold text-sky-800 hover:text-sky-950 hover:underline"
+                  className="font-semibold text-clinical-accent hover:text-clinical-hover hover:underline"
                 >
                   &larr; Back to Patient Directory
                 </Link>
@@ -427,7 +440,7 @@ export default function PatientDetailPage() {
                 </span>
               </div>
 
-              <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+              <h1 className="text-2xl sm:text-3xl font-bold text-ink-primary tracking-tight">
                 {patient ? patient.full_name : "Loading Patient Chart..."}
               </h1>
 
@@ -449,7 +462,7 @@ export default function PatientDetailPage() {
                   setMedDialogError(null);
                   addMedDialogRef.current?.showModal();
                 }}
-                className="rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-xs font-semibold px-3.5 py-2 transition"
+                className="clinical-button clinical-button-secondary text-xs"
               >
                 + Add Prescription / Regimen
               </button>
@@ -458,7 +471,7 @@ export default function PatientDetailPage() {
                 type="button"
                 onClick={() => void handleRegenerateFlags()}
                 disabled={regenerating}
-                className="rounded-lg border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-60 text-slate-800 text-xs font-semibold px-3.5 py-2 transition"
+                className="clinical-button clinical-button-secondary text-xs"
               >
                 {regenerating ? "Recomputing..." : "Regenerate Flags"}
               </button>
@@ -469,7 +482,7 @@ export default function PatientDetailPage() {
                   setUploadVisitError(null);
                   uploadVisitDialogRef.current?.showModal();
                 }}
-                className="rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold px-3.5 py-2 shadow-sm transition"
+                className="clinical-button clinical-button-primary text-xs"
               >
                 + Upload Real Visit Photo
               </button>
@@ -478,7 +491,7 @@ export default function PatientDetailPage() {
                 type="button"
                 disabled={creatingCaptureLink}
                 onClick={() => void handleGenerateCaptureLink()}
-                className="rounded-lg bg-sky-700 hover:bg-sky-800 disabled:opacity-60 text-white text-xs font-semibold px-3.5 py-2 shadow-sm transition"
+                className="clinical-button clinical-button-primary text-xs"
               >
                 {creatingCaptureLink
                   ? "Generating Link..."
@@ -489,7 +502,7 @@ export default function PatientDetailPage() {
                 type="button"
                 onClick={() => void handleDownloadReportPdf()}
                 disabled={downloadingPdf}
-                className="rounded-lg bg-slate-900 hover:bg-slate-800 disabled:opacity-60 text-white text-xs font-semibold px-3.5 py-2 shadow-sm transition"
+                className="clinical-button clinical-button-secondary text-xs"
               >
                 {downloadingPdf
                   ? "Building 3-Page PDF..."
@@ -499,7 +512,7 @@ export default function PatientDetailPage() {
           </div>
 
           {/* Structured Patient & Observation Window Metadata Strip */}
-          <dl className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
+          <dl className="chart-metadata grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-x-4 gap-y-3 text-xs">
             <div className="rounded-lg bg-slate-50 border border-slate-200/80 px-3 py-2">
               <dt className="text-[11px] font-medium text-slate-500">
                 Date of Birth
@@ -869,53 +882,53 @@ export default function PatientDetailPage() {
                     } as React.CSSProperties
                   }
                 >
-                  <thead className="bg-slate-100 text-slate-700 font-semibold text-[11px] uppercase tracking-wider border-b border-slate-200">
+                  <thead className="bg-[#006599] text-white font-semibold text-[11px] uppercase tracking-wider border-b border-[#004e78]">
                     <tr>
                       <th
                         scope="col"
-                        className="py-3 px-3.5 border-b border-slate-200"
+                        className="py-3 px-3.5 border-b border-[#004e78]"
                       >
                         Skin Concern Metric
                       </th>
                       <th
                         scope="col"
-                        className="py-3 px-3.5 border-b border-slate-200"
+                        className="py-3 px-3.5 border-b border-[#004e78]"
                       >
                         Direction &amp; MDC
                       </th>
                       <th
                         scope="col"
-                        className="py-3 px-3.5 border-b border-slate-200"
+                        className="py-3 px-3.5 border-b border-[#004e78]"
                       >
                         Baseline {baselineDate ? `(${baselineDate})` : ""}
                       </th>
                       <th
                         scope="col"
-                        className="py-3 px-3.5 border-b border-slate-200"
+                        className="py-3 px-3.5 border-b border-[#004e78]"
                       >
                         Latest {latestDate ? `(${latestDate})` : ""}
                       </th>
                       <th
                         scope="col"
-                        className="py-3 px-3.5 border-b border-slate-200"
+                        className="py-3 px-3.5 border-b border-[#004e78]"
                       >
                         &Delta; vs Baseline
                       </th>
                       <th
                         scope="col"
-                        className="py-3 px-3.5 border-b border-slate-200"
+                        className="py-3 px-3.5 border-b border-[#004e78]"
                       >
                         Severity Bucket
                       </th>
                       <th
                         scope="col"
-                        className="py-3 px-3.5 border-b border-slate-200"
+                        className="py-3 px-3.5 border-b border-[#004e78]"
                       >
                         Trajectory Verdict
                       </th>
                       <th
                         scope="col"
-                        className="py-3 px-3.5 border-b border-slate-200"
+                        className="py-3 px-3.5 border-b border-[#004e78]"
                       >
                         Sparkline ({visitCount}{" "}
                         {visitCount === 1 ? "scan" : "scans"})
