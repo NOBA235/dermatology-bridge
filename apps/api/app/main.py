@@ -1,5 +1,6 @@
 """FastAPI application entrypoint for Dermatology Bridge."""
 
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -42,10 +43,10 @@ def create_app() -> FastAPI:
     app.add_middleware(JWTAuthMiddleware)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "http://localhost:3000",
-            "http://127.0.0.1:3000",
-        ],
+        allow_origins=(
+            [origin.strip() for origin in settings.CORS_ORIGINS.split(",") if origin.strip()]
+            or ["http://localhost:3000", "http://127.0.0.1:3000"]
+        ),
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

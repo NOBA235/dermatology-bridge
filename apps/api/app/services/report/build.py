@@ -33,7 +33,7 @@ from app.services.report.charts import (
     render_sparkline_png_base64,
     render_top_concern_chart_png_base64,
 )
-from app.services.storage import PRIVATE_STORAGE_ROOT
+from app.services.storage import PRIVATE_STORAGE_ROOT, PrivateStorageService
 
 TEMPLATES_DIR = REPO_ROOT / "templates"
 REPORT_HTML_NAME = "report.html"
@@ -48,16 +48,15 @@ def _resolve_mask_data_uri(
     concern: str,
     mask_url: str | None,
     mask_storage_key: str | None,
-    storage_root: Path,
+    storage: PrivateStorageService,
 ) -> tuple[str, str]:
     """Resolve a concern mask from local private storage cache or return a clean placeholder."""
     if mask_storage_key:
-        candidate = storage_root / mask_storage_key
-        if candidate.exists() and candidate.stat().st_size > 120:
-            raw_bytes = candidate.read_bytes()
+        raw_bytes = storage.read_object(mask_storage_key)
+        if raw_bytes is not None and len(raw_bytes) > 120:
             encoded = base64.b64encode(raw_bytes).decode("ascii")
             return f"data:image/png;base64,{encoded}", "cached"
-        if candidate.exists():
+        if raw_bytes is not None:
             # Cached synthetic 1x1 marker -> render visual cached mask badge
             return render_mask_placeholder_png_base64(concern, is_cached=True), "cached"
 
@@ -76,6 +75,7 @@ def build_report_context(
 ) -> dict[str, Any]:
     """Assemble full structured context for the 3-page consultation report."""
     resolved_storage_root = storage_root or PRIVATE_STORAGE_ROOT
+    storage = PrivateStorageService(root_dir=resolved_storage_root)
 
     patient = db.get(Patient, patient_id)
     if patient is None:
@@ -164,7 +164,7 @@ def build_report_context(
             concern,
             lat_cs.mask_url if lat_cs else None,
             lat_cs.mask_storage_key if lat_cs else None,
-            resolved_storage_root,
+            storage,
         )
 
         row_dict = {

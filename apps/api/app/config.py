@@ -1,6 +1,7 @@
 """Application settings via pydantic-settings."""
 
 from functools import lru_cache
+import os
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +33,17 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str = "dev-only-hs256-signing-key-32-bytes-minimum"
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 480
+
+    # Private object storage. Local filesystem remains the development default.
+    STORAGE_BACKEND: str = "local"
+    STORAGE_BUCKET: str = ""
+    STORAGE_ENDPOINT_URL: str = ""
+    STORAGE_ACCESS_KEY_ID: str = ""
+    STORAGE_SECRET_ACCESS_KEY: str = ""
+    STORAGE_REGION: str = "us-east-1"
+
+    # Comma-separated browser origins for deployments that use a separate API host.
+    CORS_ORIGINS: str = ""
 
     # Seed defaults
     SEED_CLINICIAN_EMAIL: str = "dr.chen@bridgederm.local"
@@ -67,6 +79,29 @@ def verify_startup_invariants(settings: Settings) -> None:
         raise RuntimeError("JWT_SECRET_KEY must be set and at least 16 characters.")
     if settings.JWT_ALGORITHM != "HS256":
         raise RuntimeError("Only HS256 JWT signing is permitted by architecture lock.")
+    if settings.STORAGE_BACKEND not in {"local", "s3"}:
+        raise RuntimeError("STORAGE_BACKEND must be either 'local' or 's3'.")
+    if settings.STORAGE_BACKEND == "s3" and not all(
+        (
+            settings.STORAGE_BUCKET.strip(),
+            settings.STORAGE_ENDPOINT_URL.strip(),
+            settings.STORAGE_ACCESS_KEY_ID.strip(),
+            settings.STORAGE_SECRET_ACCESS_KEY.strip(),
+        )
+    ):
+        raise RuntimeError(
+            "S3 storage requires STORAGE_BUCKET, STORAGE_ENDPOINT_URL, "
+            "STORAGE_ACCESS_KEY_ID, and STORAGE_SECRET_ACCESS_KEY."
+        )
+    if os.environ.get("VERCEL") == "1" and settings.STORAGE_BACKEND != "s3":
+        raise RuntimeError(
+            "Vercel deployments require STORAGE_BACKEND=s3; local disk is not durable."
+        )
+    if (
+        os.environ.get("VERCEL") == "1"
+        and settings.JWT_SECRET_KEY == "dev-only-hs256-signing-key-32-bytes-minimum"
+    ):
+        raise RuntimeError("Set a unique JWT_SECRET_KEY for Vercel deployments.")
 
 
 @lru_cache

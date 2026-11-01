@@ -27,6 +27,7 @@ from app.api.schemas import (
     TrendDataPointOut,
     VisitOut,
 )
+from app.api.visits import get_storage_service
 from app.auth.jwt import CAPTURE_TOKEN_DEFAULT_TTL_MINUTES, create_capture_token
 from app.auth.middleware import get_current_clinician
 from app.db.models import Clinician, ConcernScore, Patient, PatientMedication, Visit
@@ -41,6 +42,7 @@ from app.services.report import (
     build_patient_fhir_bundle,
     build_patient_report_pdf,
 )
+from app.services.storage import PrivateStorageService
 
 router = APIRouter(prefix="/patients", tags=["patients"])
 
@@ -163,9 +165,11 @@ def delete_patient(
     patient_id: uuid.UUID,
     clinician: Clinician = Depends(get_current_clinician),
     db: Session = Depends(get_db),
+    storage: PrivateStorageService = Depends(get_storage_service),
 ) -> None:
-    """Delete a patient record and all associated visits, scores, flags, and medications."""
+    """Delete patient records and private objects for all associated visits."""
     patient = _get_authorized_patient(db, patient_id, clinician)
+    storage.delete_patient_data(patient.id)
     db.delete(patient)
     db.commit()
 

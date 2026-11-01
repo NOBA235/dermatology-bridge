@@ -11,7 +11,7 @@ export const PRIVACY_NOTICE =
 export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ||
   process.env.NEXT_PUBLIC_API_URL ||
-  "http://localhost:8000";
+  (process.env.NODE_ENV === "development" ? "http://localhost:8000" : "");
 
 const TOKEN_STORAGE_KEY = "dermobridge_clinician_jwt";
 const CLINICIAN_STORAGE_KEY = "dermobridge_clinician_profile";

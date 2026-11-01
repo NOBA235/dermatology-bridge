@@ -10,7 +10,9 @@ Security invariants:
 
 import hashlib
 import hmac
+import mimetypes
 from pathlib import Path
+import shutil
 import time
 import uuid
 
@@ -29,11 +31,98 @@ _SYNTHETIC_MASK_PNG = (
 
 
 class PrivateStorageService:
-    """Private S3-compatible storage service with local encrypted-path backing."""
+    """Private S3-compatible object storage, with a local development backend."""
 
     def __init__(self, root_dir: Path | None = None) -> None:
         self.root_dir = root_dir or PRIVATE_STORAGE_ROOT
-        self.root_dir.mkdir(parents=True, exist_ok=True)
+        self.settings = get_settings()
+        self._client = None
+        if self.settings.STORAGE_BACKEND == "local":
+            self.root_dir.mkdir(parents=True, exist_ok=True)
+
+    def _object_key(self, storage_key: str) -> str:
+        """Reject URL-like or traversal keys before accessing either backend."""
+        if "://" in storage_key or storage_key.startswith("/"):
+            raise ValueError("storage_key must be a relative private object key.")
+        if any(part in {"", ".", ".."} for part in storage_key.split("/")):
+            raise ValueError("Invalid storage key path.")
+        return storage_key
+
+    @property
+    def _s3(self):
+        if self._client is None:
+            import boto3
+            from botocore.config import Config
+
+            self._client = boto3.client(
+                "s3",
+                endpoint_url=self.settings.STORAGE_ENDPOINT_URL,
+                aws_access_key_id=self.settings.STORAGE_ACCESS_KEY_ID,
+                aws_secret_access_key=self.settings.STORAGE_SECRET_ACCESS_KEY,
+                region_name=self.settings.STORAGE_REGION,
+                config=Config(
+                    signature_version="s3v4",
+                    s3={"addressing_style": "path"},
+                ),
+            )
+        return self._client
+
+    def _write_object(self, storage_key: str, data: bytes, content_type: str) -> None:
+        storage_key = self._object_key(storage_key)
+        if self.settings.STORAGE_BACKEND == "s3":
+            self._s3.put_object(
+                Bucket=self.settings.STORAGE_BUCKET,
+                Key=storage_key,
+                Body=data,
+                ContentType=content_type,
+            )
+            return
+
+        target_path = self.root_dir / storage_key
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        target_path.write_bytes(data)
+
+    def read_object(self, storage_key: str) -> bytes | None:
+        """Read a private object for server-side report rendering."""
+        storage_key = self._object_key(storage_key)
+        if self.settings.STORAGE_BACKEND == "s3":
+            from botocore.exceptions import ClientError
+
+            try:
+                response = self._s3.get_object(
+                    Bucket=self.settings.STORAGE_BUCKET,
+                    Key=storage_key,
+                )
+            except ClientError as exc:
+                code = str(exc.response.get("Error", {}).get("Code", ""))
+                if code in {"NoSuchKey", "404", "NotFound"}:
+                    return None
+                raise
+            return response["Body"].read()
+
+        target_path = self.root_dir / storage_key
+        return target_path.read_bytes() if target_path.is_file() else None
+
+    def delete_patient_data(self, patient_id: uuid.UUID) -> None:
+        """Delete all private files for a patient from the configured backend."""
+        prefix = f"patients/{patient_id}/"
+        if self.settings.STORAGE_BACKEND == "s3":
+            paginator = self._s3.get_paginator("list_objects_v2")
+            for page in paginator.paginate(
+                Bucket=self.settings.STORAGE_BUCKET,
+                Prefix=prefix,
+            ):
+                objects = [{"Key": item["Key"]} for item in page.get("Contents", [])]
+                if objects:
+                    self._s3.delete_objects(
+                        Bucket=self.settings.STORAGE_BUCKET,
+                        Delete={"Objects": objects, "Quiet": True},
+                    )
+            return
+
+        patient_dir = self.root_dir / "patients" / str(patient_id)
+        if patient_dir.exists():
+            shutil.rmtree(patient_dir)
 
     def store_visit_selfie(
         self,
@@ -48,9 +137,8 @@ class PrivateStorageService:
         if ext not in ("jpg", "jpeg", "png", "webp"):
             ext = "jpg"
         storage_key = f"patients/{patient_id}/visits/{visit_id}/selfie.{ext}"
-        target_path = self.root_dir / storage_key
-        target_path.parent.mkdir(parents=True, exist_ok=True)
-        target_path.write_bytes(image_bytes)
+        content_type = mimetypes.guess_type(f"image.{ext}")[0] or "image/jpeg"
+        self._write_object(storage_key, image_bytes, content_type)
         return storage_key
 
     async def cache_concern_mask(
@@ -67,28 +155,25 @@ class PrivateStorageService:
             return None
 
         storage_key = f"patients/{patient_id}/visits/{visit_id}/masks/{concern}.png"
-        target_path = self.root_dir / storage_key
-        target_path.parent.mkdir(parents=True, exist_ok=True)
 
         if allow_live_fetch and mask_url.startswith(("http://", "https://")) and ".youcam.local" not in mask_url:
             try:
                 async with httpx.AsyncClient(timeout=15.0) as client:
                     resp = await client.get(mask_url)
                     resp.raise_for_status()
-                    target_path.write_bytes(resp.content)
+                    self._write_object(storage_key, resp.content, "image/png")
                     return storage_key
             except httpx.HTTPError:
                 # Fall back to placeholder bytes if ephemeral URL fails to download
-                target_path.write_bytes(_SYNTHETIC_MASK_PNG)
+                self._write_object(storage_key, _SYNTHETIC_MASK_PNG, "image/png")
                 return storage_key
 
-        target_path.write_bytes(_SYNTHETIC_MASK_PNG)
+        self._write_object(storage_key, _SYNTHETIC_MASK_PNG, "image/png")
         return storage_key
 
     def generate_signed_url(self, storage_key: str, ttl_seconds: int = 300) -> str:
         """Create a short-lived signed path for private retrieval (never logged)."""
-        if "://" in storage_key:
-            raise ValueError("storage_key must be a private key path, not a URL.")
+        storage_key = self._object_key(storage_key)
         settings = get_settings()
         expires = int(time.time()) + ttl_seconds
         message = f"{storage_key}:{expires}".encode("utf-8")
