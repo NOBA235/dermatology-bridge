@@ -6,13 +6,16 @@ For clinician review — not a diagnosis.
 import base64
 from decimal import Decimal
 import io
+import os
 from pathlib import Path
+import tempfile
 import textwrap
 from typing import Any
 import uuid
 
-from jinja2 import Environment, FileSystemLoader, select_autoescape
-import matplotlib
+os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "matplotlib"))
+from jinja2 import Environment, FileSystemLoader, select_autoescape  # noqa: E402
+import matplotlib  # noqa: E402
 matplotlib.use("Agg")
 import matplotlib.image as mpimg  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402

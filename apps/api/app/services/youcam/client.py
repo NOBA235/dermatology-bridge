@@ -18,7 +18,7 @@ import zipfile
 
 import httpx
 
-from app.config import REPO_ROOT
+from app.config import WRITABLE_RUNTIME_DIR
 from app.domain.concerns import (
     ANALYSIS_VERSION,
     CONCERN_DIRECTION,
@@ -27,7 +27,7 @@ from app.domain.concerns import (
 )
 
 UNIT_BUDGET_LIMIT = 1000
-DEFAULT_UNIT_BUDGET_CSV = REPO_ROOT / "logs" / "unit_budget.csv"
+DEFAULT_UNIT_BUDGET_CSV = WRITABLE_RUNTIME_DIR / "logs" / "unit_budget.csv"
 
 INITIAL_POLL_INTERVAL_SECONDS = 2.0
 MAX_POLL_INTERVAL_SECONDS = 30.0

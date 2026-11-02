@@ -4,8 +4,12 @@ import base64
 from collections.abc import Sequence
 from decimal import Decimal
 import io
+import os
+from pathlib import Path
+import tempfile
 
-import matplotlib
+os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "matplotlib"))
+import matplotlib  # noqa: E402
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 

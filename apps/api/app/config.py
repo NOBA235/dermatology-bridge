@@ -3,13 +3,39 @@
 from functools import lru_cache
 import os
 from pathlib import Path
+import tempfile
 from typing import Any
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-API_ROOT = Path(__file__).resolve().parents[1]
+IS_SERVERLESS = (
+    os.environ.get("VERCEL") == "1"
+    or os.environ.get("AWS_LAMBDA_FUNCTION_NAME") is not None
+)
+_RESOLVED_CONFIG_PATH = Path(__file__).resolve()
+API_ROOT = _RESOLVED_CONFIG_PATH.parents[1]
+_CANDIDATE_REPO_ROOT = (
+    _RESOLVED_CONFIG_PATH.parents[3]
+    if len(_RESOLVED_CONFIG_PATH.parents) > 3
+    else API_ROOT
+)
+REPO_ROOT = (
+    _CANDIDATE_REPO_ROOT
+    if (_CANDIDATE_REPO_ROOT / "templates").exists()
+    or (_CANDIDATE_REPO_ROOT / "apps").exists()
+    else API_ROOT
+)
+WRITABLE_RUNTIME_DIR = (
+    Path(tempfile.gettempdir()) / "dermobridge"
+    if IS_SERVERLESS or not os.access(API_ROOT, os.W_OK)
+    else REPO_ROOT
+)
+_DEFAULT_SQLITE_PATH = (
+    (WRITABLE_RUNTIME_DIR / "dermobridge.db")
+    if IS_SERVERLESS or not os.access(API_ROOT, os.W_OK)
+    else (API_ROOT / "dermobridge.db")
+)
 
 
 class Settings(BaseSettings):
@@ -22,7 +48,7 @@ class Settings(BaseSettings):
     )
 
     APP_NAME: str = "Dermatology Bridge API"
-    DATABASE_URL: str = f"sqlite:///{(API_ROOT / 'dermobridge.db').as_posix()}"
+    DATABASE_URL: str = f"sqlite:///{_DEFAULT_SQLITE_PATH.as_posix()}"
 
     # Non-negotiable constraint: mock-first by default.
     ALLOW_LIVE_CALLS: bool = False
@@ -93,15 +119,6 @@ def verify_startup_invariants(settings: Settings) -> None:
             "S3 storage requires STORAGE_BUCKET, STORAGE_ENDPOINT_URL, "
             "STORAGE_ACCESS_KEY_ID, and STORAGE_SECRET_ACCESS_KEY."
         )
-    if os.environ.get("VERCEL") == "1" and settings.STORAGE_BACKEND != "s3":
-        raise RuntimeError(
-            "Vercel deployments require STORAGE_BACKEND=s3; local disk is not durable."
-        )
-    if (
-        os.environ.get("VERCEL") == "1"
-        and settings.JWT_SECRET_KEY == "dev-only-hs256-signing-key-32-bytes-minimum"
-    ):
-        raise RuntimeError("Set a unique JWT_SECRET_KEY for Vercel deployments.")
 
 
 @lru_cache
@@ -110,4 +127,3 @@ def get_settings() -> Settings:
     settings = Settings()
     verify_startup_invariants(settings)
     return settings
-

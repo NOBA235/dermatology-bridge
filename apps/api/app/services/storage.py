@@ -18,9 +18,9 @@ import uuid
 
 import httpx
 
-from app.config import REPO_ROOT, get_settings
+from app.config import WRITABLE_RUNTIME_DIR, get_settings
 
-PRIVATE_STORAGE_ROOT = REPO_ROOT / "logs" / "private_storage"
+PRIVATE_STORAGE_ROOT = WRITABLE_RUNTIME_DIR / "logs" / "private_storage"
 
 # Minimal 1x1 transparent PNG used for deterministic mock mask caching
 _SYNTHETIC_MASK_PNG = (
@@ -38,7 +38,11 @@ class PrivateStorageService:
         self.settings = get_settings()
         self._client = None
         if self.settings.STORAGE_BACKEND == "local":
-            self.root_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                self.root_dir.mkdir(parents=True, exist_ok=True)
+            except OSError:
+                self.root_dir = WRITABLE_RUNTIME_DIR / "logs" / "private_storage"
+                self.root_dir.mkdir(parents=True, exist_ok=True)
 
     def _object_key(self, storage_key: str) -> str:
         """Reject URL-like or traversal keys before accessing either backend."""
