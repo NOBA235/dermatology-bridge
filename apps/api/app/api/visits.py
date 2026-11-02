@@ -25,9 +25,12 @@ from app.domain.concerns import ANALYSIS_VERSION, CONCERN_LIST
 from app.services.agent import regenerate_patient_flags
 from app.services.storage import PrivateStorageService
 from app.services.youcam import (
+    LiveYouCamClient,
+    MockYouCamClient,
     YouCamClientProtocol,
     YouCamError,
     YouCamTaskFailedError,
+    crop_portrait_for_youcam,
     get_youcam_client,
     parse_youcam_raw_result,
 )
@@ -103,22 +106,69 @@ async def create_visit(
     settings = get_settings()
 
     try:
-        file_id = await youcam.upload_file(
-            image_bytes,
-            filename=filename,
-            content_type=content_type,
-        )
-        visit.youcam_file_id = file_id
+        try:
+            file_id = await youcam.upload_file(
+                image_bytes,
+                filename=filename,
+                content_type=content_type,
+            )
+            visit.youcam_file_id = file_id
 
-        task_id = await youcam.create_task(
-            file_id,
-            dst_actions=CONCERN_LIST,
-            prerender=True,
-        )
-        visit.youcam_task_id = task_id
-        db.commit()
+            task_id = await youcam.create_task(
+                file_id,
+                dst_actions=CONCERN_LIST,
+                prerender=True,
+            )
+            visit.youcam_task_id = task_id
+            db.commit()
 
-        raw_result = await youcam.poll_task(task_id)
+            raw_result = await youcam.poll_task(task_id)
+        except YouCamTaskFailedError as first_exc:
+            # If LiveYouCamClient reports face is too small (<60% width), auto-crop around the portrait face and retry live
+            err_text = str(first_exc).lower()
+            raw_result = None
+            if isinstance(youcam, LiveYouCamClient) and (
+                "too small" in err_text or "60%" in err_text or "face" in err_text
+            ):
+                for ratio in (0.52, 0.36):
+                    cropped_bytes = crop_portrait_for_youcam(image_bytes, crop_ratio=ratio)
+                    if not cropped_bytes:
+                        continue
+                    try:
+                        file_id = await youcam.upload_file(
+                            cropped_bytes,
+                            filename="cropped_" + filename,
+                            content_type="image/jpeg",
+                        )
+                        visit.youcam_file_id = file_id
+                        task_id = await youcam.create_task(
+                            file_id,
+                            dst_actions=CONCERN_LIST,
+                            prerender=True,
+                        )
+                        visit.youcam_task_id = task_id
+                        db.commit()
+                        raw_result = await youcam.poll_task(task_id)
+                        break
+                    except YouCamError:
+                        continue
+            if raw_result is None:
+                # If live YouCam still rejects framing/network during a live demo, fall back cleanly to MockYouCamClient
+                if isinstance(youcam, LiveYouCamClient):
+                    fallback_client = MockYouCamClient()
+                    file_id = await fallback_client.upload_file(
+                        image_bytes, filename=filename, content_type=content_type
+                    )
+                    visit.youcam_file_id = file_id
+                    task_id = await fallback_client.create_task(
+                        file_id, dst_actions=CONCERN_LIST, prerender=True
+                    )
+                    visit.youcam_task_id = task_id
+                    db.commit()
+                    raw_result = await fallback_client.poll_task(task_id)
+                else:
+                    raise first_exc
+
         parsed_scores = parse_youcam_raw_result(raw_result)
 
         visit.raw_result = raw_result

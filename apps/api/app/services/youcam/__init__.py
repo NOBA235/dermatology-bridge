@@ -17,6 +17,7 @@ from app.services.youcam.client import (
     YouCamTaskFailedError,
     YouCamTimeoutError,
     compute_backoff_delay,
+    crop_portrait_for_youcam,
     parse_youcam_raw_result,
 )
 from app.services.youcam.mock import MockYouCamClient
@@ -55,6 +56,7 @@ __all__ = [
     "YouCamTaskFailedError",
     "YouCamTimeoutError",
     "compute_backoff_delay",
+    "crop_portrait_for_youcam",
     "get_youcam_client",
     "parse_youcam_raw_result",
 ]

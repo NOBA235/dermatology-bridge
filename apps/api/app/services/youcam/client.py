@@ -583,3 +583,37 @@ class _BorrowedAsyncClient:
 
     async def __aexit__(self, *_args: Any) -> None:
         return None
+
+
+def crop_portrait_for_youcam(
+    image_bytes: bytes,
+    crop_ratio: float = 0.52,
+) -> bytes | None:
+    """Crop a portrait image tighter around the face region so face width exceeds YouCam's 60% minimum."""
+    try:
+        from PIL import Image, ImageOps
+
+        with Image.open(io.BytesIO(image_bytes)) as raw_img:
+            img = ImageOps.exif_transpose(raw_img).convert("RGB")
+            w, h = img.size
+            if w < 80 or h < 80:
+                return None
+            new_w = max(64, int(w * crop_ratio))
+            new_h = max(64, int(h * min(1.0, crop_ratio * 1.15)))
+            left = max(0, (w - new_w) // 2)
+            # In head-and-shoulders portraits, the face sits centered horizontally and ~38% from the top
+            center_y = int(h * 0.38)
+            top = max(0, min(h - new_h, center_y - (new_h // 2)))
+            cropped = img.crop((left, top, left + new_w, top + new_h))
+            if cropped.width < 720:
+                scale = 720.0 / float(cropped.width)
+                cropped = cropped.resize(
+                    (int(cropped.width * scale), int(cropped.height * scale)),
+                    Image.Resampling.LANCZOS,
+                )
+            buf = io.BytesIO()
+            cropped.save(buf, format="JPEG", quality=92)
+            return buf.getvalue()
+    except Exception:
+        return None
+
