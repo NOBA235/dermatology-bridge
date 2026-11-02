@@ -32,7 +32,7 @@ export default function ClinicianLoginPage() {
     setError(null);
 
     try {
-      const data = await apiFetch<LoginResponse>("/api/auth/login", {
+      const data = await apiFetch<LoginResponse>("/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: email.trim(), password }),
