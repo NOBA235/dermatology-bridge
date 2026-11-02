@@ -253,16 +253,27 @@ export default function PatientsDirectoryPage() {
                   ? `/patients/${primaryPatientId}`
                   : "#patient-directory-section"
               }
-              className="dermnet-atlas-card lg:col-span-7 lg:row-span-2 min-h-[300px] sm:min-h-[370px] flex flex-col justify-between p-6 sm:p-8 text-white group"
-              style={{
-                background:
-                  "radial-gradient(circle at 68% 58%, rgba(214, 134, 110, 0.42) 0%, rgba(145, 72, 56, 0.78) 45%, #3c1d18 100%)",
-              }}
+              className="dermnet-atlas-card relative lg:col-span-7 lg:row-span-2 min-h-[300px] sm:min-h-[370px] flex flex-col justify-between p-6 sm:p-8 text-white group bg-[#1f0d09]"
             >
+              {/* Free Open Clinical Photography (Wikimedia Commons - Acne vulgaris) */}
+              <img
+                src="/images/atlas/acne-erythema.jpg"
+                alt="Clinical presentation of inflammatory acne vulgaris and facial erythema"
+                width={903}
+                height={1657}
+                fetchPriority="high"
+                decoding="async"
+                className="absolute inset-0 h-full w-full object-cover object-[center_35%] opacity-45 group-hover:opacity-55 group-hover:scale-105 transition-all duration-500 ease-out"
+              />
+              {/* High-contrast clinical scrim overlay ensuring WCAG AAA typography */}
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#1f0d09]/95 via-[#35140d]/75 to-[#1a0a07]/60"
+              />
               {/* Subtle clinical contour circles mimicking erythema zones */}
               <div
                 aria-hidden="true"
-                className="pointer-events-none absolute inset-0 opacity-30"
+                className="pointer-events-none absolute inset-0 opacity-25"
                 style={{
                   backgroundImage:
                     "radial-gradient(circle at 35% 65%, rgba(255,195,175,0.45) 0%, transparent 45%), radial-gradient(circle at 72% 48%, rgba(255,180,160,0.4) 0%, transparent 42%)",
@@ -270,7 +281,7 @@ export default function PatientsDirectoryPage() {
               />
 
               <div className="relative z-10 space-y-2 max-w-lg">
-                <span className="inline-block rounded bg-black/30 backdrop-blur-sm border border-white/20 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-amber-100">
+                <span className="inline-block rounded bg-black/40 backdrop-blur-sm border border-white/20 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-amber-100">
                   Featured Longitudinal Cohort &bull; YouCam S2S v2.0
                 </span>
                 <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-white drop-shadow-sm">
@@ -285,7 +296,7 @@ export default function PatientsDirectoryPage() {
               </div>
 
               <div className="relative z-10 flex flex-wrap items-end justify-between gap-4 pt-8">
-                <div className="flex items-center gap-2.5 opacity-85">
+                <div className="flex items-center gap-2.5 opacity-90">
                   <DermBridgeCrestIcon className="h-12 w-12 text-white/80" />
                   <div className="text-[11px] leading-tight text-white/90">
                     <div className="font-bold">DermBridge&reg; Clinical</div>
@@ -310,12 +321,23 @@ export default function PatientsDirectoryPage() {
                   ? `/patients/${primaryPatientId}#snapshot-matrix-heading`
                   : "#patient-directory-section"
               }
-              className="dermnet-atlas-card lg:col-span-5 min-h-[175px] flex flex-col justify-between p-5 sm:p-6 text-white group"
-              style={{
-                background:
-                  "radial-gradient(circle at 75% 60%, rgba(188, 132, 98, 0.45) 0%, rgba(92, 54, 38, 0.86) 55%, #2b1810 100%)",
-              }}
+              className="dermnet-atlas-card relative lg:col-span-5 min-h-[175px] flex flex-col justify-between p-5 sm:p-6 text-white group bg-[#1b1009]"
             >
+              {/* Free Open Clinical Photography (Wikimedia Commons - Solar lentigo / age spot) */}
+              <img
+                src="/images/atlas/hyperpigmentation-age-spots.jpg"
+                alt="Clinical cutaneous hyperpigmentation and solar lentigo lesion"
+                width={960}
+                height={720}
+                loading="eager"
+                decoding="async"
+                className="absolute inset-0 h-full w-full object-cover object-center opacity-40 group-hover:opacity-50 group-hover:scale-105 transition-all duration-500 ease-out"
+              />
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#1b1009]/95 via-[#2b1810]/75 to-[#1c0f08]/60"
+              />
+
               <div className="relative z-10 space-y-1">
                 <h2 className="text-lg sm:text-xl font-extrabold tracking-tight text-white leading-snug">
                   Cutaneous hyperpigmentation &amp; UV age spots
@@ -329,7 +351,7 @@ export default function PatientsDirectoryPage() {
               </div>
 
               <div className="relative z-10 flex items-end justify-between gap-2 pt-3">
-                <div className="flex items-center gap-2 opacity-85">
+                <div className="flex items-center gap-2 opacity-90">
                   <DermBridgeCrestIcon className="h-8 w-8 text-white/80" />
                   <span className="text-[11px] font-semibold text-white/85">
                     age_spot (MDC &plusmn;3.5) &bull; radiance &bull; texture
@@ -345,12 +367,23 @@ export default function PatientsDirectoryPage() {
                   ? `/patients/${primaryPatientId}#prescription-correlations-heading`
                   : "#patient-directory-section"
               }
-              className="dermnet-atlas-card lg:col-span-5 min-h-[175px] flex flex-col justify-between p-5 sm:p-6 text-white group"
-              style={{
-                background:
-                  "radial-gradient(circle at 70% 50%, rgba(168, 122, 96, 0.42) 0%, rgba(71, 52, 44, 0.88) 58%, #211815 100%)",
-              }}
+              className="dermnet-atlas-card relative lg:col-span-5 min-h-[175px] flex flex-col justify-between p-5 sm:p-6 text-white group bg-[#140e0c]"
             >
+              {/* Free Open Clinical Photography (Wikimedia Commons - Barrier moisturizer cream) */}
+              <img
+                src="/images/atlas/barrier-moisturizer.jpg"
+                alt="Topical emollient barrier formulation for epidermal moisture support"
+                width={960}
+                height={640}
+                loading="eager"
+                decoding="async"
+                className="absolute inset-0 h-full w-full object-cover object-center opacity-40 group-hover:opacity-50 group-hover:scale-105 transition-all duration-500 ease-out"
+              />
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#140e0c]/95 via-[#211815]/75 to-[#150d0a]/60"
+              />
+
               <div className="relative z-10 space-y-1">
                 <h2 className="text-lg sm:text-xl font-extrabold tracking-tight text-white leading-snug">
                   Epidermal barrier moisture &amp; Rx cross-referencing
@@ -364,7 +397,7 @@ export default function PatientsDirectoryPage() {
               </div>
 
               <div className="relative z-10 flex items-end justify-between gap-2 pt-3">
-                <div className="flex items-center gap-2 opacity-85">
+                <div className="flex items-center gap-2 opacity-90">
                   <DermBridgeCrestIcon className="h-8 w-8 text-white/80" />
                   <span className="text-[11px] font-semibold text-white/85">
                     Adapalene &bull; Spironolactone &bull; Ceramide Barrier
