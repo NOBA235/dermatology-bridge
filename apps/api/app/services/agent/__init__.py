@@ -3,6 +3,7 @@
 from app.services.agent.flags_service import (
     FlagRegenerationResult,
     build_agent_source_json,
+    get_or_create_patient_flags,
     regenerate_patient_flags,
 )
 from app.services.agent.narrate import (

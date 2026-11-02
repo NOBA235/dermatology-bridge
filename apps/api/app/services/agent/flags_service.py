@@ -185,9 +185,17 @@ def regenerate_patient_flags(
         db.add(flag_row)
         inserted_flags.append(flag_row)
 
+    db.flush()
     db.commit()
-    for row in inserted_flags:
-        db.refresh(row)
+    inserted_flags = list(
+        db.execute(
+            select(TreatmentFlag)
+            .where(TreatmentFlag.patient_id == patient_id)
+            .order_by(TreatmentFlag.id.asc())
+        )
+        .scalars()
+        .all()
+    )
 
     top_concerns = [CONCERN_LIST[i] for i in narrative.top_concern_indices]
     return FlagRegenerationResult(
@@ -199,4 +207,68 @@ def regenerate_patient_flags(
         used_fallback=narrative.used_fallback,
         flags=inserted_flags,
     )
+
+
+def get_or_create_patient_flags(
+    db: Session,
+    patient_id: uuid.UUID,
+) -> FlagRegenerationResult:
+    """Return existing materialized treatment_flags without write contention if up to date, else regenerate."""
+    stmt = (
+        select(Visit)
+        .where(
+            Visit.patient_id == patient_id,
+            Visit.youcam_status == "success",
+        )
+        .options(selectinload(Visit.concern_scores))
+        .order_by(Visit.visit_date.asc(), Visit.created_at.asc())
+    )
+    visits = list(db.execute(stmt).scalars().all())
+    if not visits:
+        return FlagRegenerationResult(
+            patient_id=patient_id,
+            visit_count=0,
+            top_concern_indices=[],
+            top_concerns=[],
+            summary=ensure_clinical_disclaimer(
+                "No completed visits available for flag computation."
+            ),
+            used_fallback=False,
+            flags=[],
+        )
+
+    existing_flags = list(
+        db.execute(
+            select(TreatmentFlag)
+            .where(TreatmentFlag.patient_id == patient_id)
+            .order_by(TreatmentFlag.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+    latest_visit_id = visits[-1].id
+    baseline_visit_id = visits[0].id
+    if (
+        len(existing_flags) == len(CONCERN_LIST)
+        and all(
+            f.latest_visit_id == latest_visit_id
+            and f.baseline_visit_id == baseline_visit_id
+            for f in existing_flags
+        )
+    ):
+        source_json = build_agent_source_json(visits)
+        narrative: AgentNarrativeOutput = generate_narrative(source_json)
+        top_concerns = [CONCERN_LIST[i] for i in narrative.top_concern_indices]
+        return FlagRegenerationResult(
+            patient_id=patient_id,
+            visit_count=len(visits),
+            top_concern_indices=narrative.top_concern_indices,
+            top_concerns=top_concerns,
+            summary=narrative.summary,
+            used_fallback=narrative.used_fallback,
+            flags=existing_flags,
+        )
+
+    return regenerate_patient_flags(db, patient_id)
+
 

@@ -4,6 +4,7 @@ from collections.abc import Generator
 import os
 import re
 import socket
+import threading
 from typing import Any
 from urllib.parse import quote, unquote
 
@@ -78,7 +79,17 @@ def build_engine(database_url: str | None = None) -> Engine:
         connect_args["prepare_threshold"] = None
         connect_args["connect_timeout"] = 10
 
-    engine = create_engine(url, pool_pre_ping=True, connect_args=connect_args)
+    if url.startswith("postgresql"):
+        engine = create_engine(
+            url,
+            pool_pre_ping=True,
+            pool_size=15,
+            max_overflow=20,
+            pool_recycle=300,
+            connect_args=connect_args,
+        )
+    else:
+        engine = create_engine(url, pool_pre_ping=True, connect_args=connect_args)
 
     if url.startswith("sqlite"):
 
@@ -94,6 +105,7 @@ def build_engine(database_url: str | None = None) -> Engine:
 engine = build_engine()
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 _runtime_db_initialized = False
+_runtime_db_lock = threading.Lock()
 
 
 def _ensure_runtime_database_ready() -> None:
@@ -102,34 +114,42 @@ def _ensure_runtime_database_ready() -> None:
     if _runtime_db_initialized:
         return
 
-    from app.db.base import Base
-    from app.db.models import Clinician
-    from app.scripts.seed import seed_demo_longitudinal
-
-    try:
-        with engine.connect() as conn:
-            conn.execute(text("SELECT 1"))
-    except SQLAlchemyError:
-        if not IS_SERVERLESS:
+    with _runtime_db_lock:
+        if _runtime_db_initialized:
             return
-        fallback_dir = WRITABLE_RUNTIME_DIR
-        fallback_dir.mkdir(parents=True, exist_ok=True)
-        fallback_url = f"sqlite:///{(fallback_dir / 'dermobridge.db').as_posix()}"
-        engine = build_engine(fallback_url)
-        SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-    try:
-        Base.metadata.create_all(bind=engine)
-        with SessionLocal() as seed_db:
-            clinician_count = seed_db.scalar(
-                select(func.count()).select_from(Clinician)
-            )
-            if not clinician_count:
-                seed_demo_longitudinal(seed_db)
-        _runtime_db_initialized = True
-    except SQLAlchemyError:
-        # Leave uninitialized so explicit health checks can surface DB errors if non-serverless
-        pass
+        from app.db.base import Base
+        from app.db.models import Clinician
+        from app.scripts.seed import seed_demo_longitudinal
+
+        try:
+            with SessionLocal() as check_db:
+                clinician_count = check_db.scalar(
+                    select(func.count()).select_from(Clinician)
+                )
+                if clinician_count and clinician_count > 0:
+                    _runtime_db_initialized = True
+                    return
+        except SQLAlchemyError:
+            if IS_SERVERLESS:
+                fallback_dir = WRITABLE_RUNTIME_DIR
+                fallback_dir.mkdir(parents=True, exist_ok=True)
+                fallback_url = f"sqlite:///{(fallback_dir / 'dermobridge.db').as_posix()}"
+                engine = build_engine(fallback_url)
+                SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+        try:
+            Base.metadata.create_all(bind=engine)
+            with SessionLocal() as seed_db:
+                clinician_count = seed_db.scalar(
+                    select(func.count()).select_from(Clinician)
+                )
+                if not clinician_count:
+                    seed_demo_longitudinal(seed_db)
+            _runtime_db_initialized = True
+        except SQLAlchemyError:
+            # Leave uninitialized so explicit health checks can surface DB errors if non-serverless
+            pass
 
 
 def get_db() -> Generator[Session, None, None]:

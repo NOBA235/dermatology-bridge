@@ -152,8 +152,15 @@ export default function PatientDetailPage() {
   useEffect(() => {
     void fetchAllData(false);
     const intervalId = window.setInterval(() => {
+      if (
+        uploadVisitDialogRef.current?.open ||
+        addMedDialogRef.current?.open ||
+        deleteMedDialogRef.current?.open
+      ) {
+        return;
+      }
       void fetchAllData(true);
-    }, 4000);
+    }, 10000);
 
     const onVisibility = () => {
       if (document.visibilityState === "visible") {

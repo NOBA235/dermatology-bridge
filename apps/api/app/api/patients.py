@@ -36,7 +36,7 @@ from app.domain.concerns import CONCERN_DIRECTION, CONCERN_LABELS, CONCERN_LIST
 from app.domain.flags import MDC_TABLE, compute_delta_and_pct, compute_verdict
 from app.domain.medications import cross_reference_medication
 from app.domain.severity import map_score_to_severity
-from app.services.agent import regenerate_patient_flags
+from app.services.agent import get_or_create_patient_flags, regenerate_patient_flags
 from app.services.report import (
     FHIRBundle,
     build_patient_fhir_bundle,
@@ -397,7 +397,7 @@ def get_patient_flags_endpoint(
 ) -> PatientFlagsResponse:
     """Return materialized treatment_flags and grounded summary for a patient."""
     patient = _get_authorized_patient(db, patient_id, clinician)
-    outcome = regenerate_patient_flags(db, patient.id)
+    outcome = get_or_create_patient_flags(db, patient.id)
     return PatientFlagsResponse(
         patient_id=patient.id,
         visit_count=outcome.visit_count,
