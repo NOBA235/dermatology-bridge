@@ -239,13 +239,42 @@ def parse_youcam_raw_result(raw_result: dict[str, Any]) -> list[ParsedConcernSco
 
     by_concern: dict[str, dict[str, Any]] = {}
 
+    # Support Perfect Corp S2S v2.0 results.output[] list format as well as direct results[] list
+    items_list: list[Any] | None = None
     if isinstance(results_node, list):
-        for item in results_node:
+        items_list = results_node
+    elif isinstance(results_node, dict) and isinstance(results_node.get("output"), list):
+        items_list = results_node["output"]
+
+    if items_list is not None:
+        for item in items_list:
             if not isinstance(item, dict):
                 continue
             concern_key = item.get("concern") or item.get("type")
-            if isinstance(concern_key, str):
-                internal_key = _YOUCAM_TO_INTERNAL_ACTION.get(concern_key, concern_key)
+            if not isinstance(concern_key, str):
+                continue
+            internal_key = _YOUCAM_TO_INTERNAL_ACTION.get(concern_key, concern_key)
+            if internal_key not in CONCERN_DIRECTION:
+                continue
+
+            # Live S2S v2.0 output[] items contain 'ui_score', 'raw_score', and 'mask_urls'
+            is_live_output_item = "ui_score" in item and "raw_score" in item
+            if is_live_output_item:
+                num_val = float(item.get("raw_score", item.get("ui_score", 0.0)))
+                if CONCERN_DIRECTION[internal_key] == "lower_is_better":
+                    num_val = max(0.0, min(100.0, 100.0 - num_val))
+                mask_urls = item.get("mask_urls")
+                first_mask = (
+                    mask_urls[0]
+                    if isinstance(mask_urls, list) and mask_urls and isinstance(mask_urls[0], str)
+                    else item.get("mask_url")
+                )
+                by_concern[internal_key] = {
+                    "concern": internal_key,
+                    "score": round(num_val, 2),
+                    "mask_url": first_mask,
+                }
+            else:
                 by_concern[internal_key] = item
     elif isinstance(results_node, dict):
         score_info = (
